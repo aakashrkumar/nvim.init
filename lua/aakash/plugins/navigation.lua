@@ -87,6 +87,12 @@ return {
           -- Find references for the word under your cursor.
           vim.keymap.set('n', 'grr', builtin.lsp_references, { buffer = buf, desc = '[G]oto [R]eferences' })
 
+          -- Find callers of the function under your cursor.
+          vim.keymap.set('n', 'grI', builtin.lsp_incoming_calls, { buffer = buf, desc = '[G]oto [I]ncoming calls' })
+
+          -- Find functions called by the function under your cursor.
+          vim.keymap.set('n', 'grO', builtin.lsp_outgoing_calls, { buffer = buf, desc = '[G]oto [O]utgoing calls' })
+
           -- Jump to the implementation of the word under your cursor.
           -- Useful when your language has ways of declaring types without an actual implementation.
           vim.keymap.set('n', 'gri', builtin.lsp_implementations, { buffer = buf, desc = '[G]oto [I]mplementation' })

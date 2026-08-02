@@ -22,13 +22,23 @@ return {
         },
 
         server = {
-          on_attach = function(_, bufnr)
+          capabilities = require('blink.cmp').get_lsp_capabilities(),
+
+          on_attach = function(client, bufnr)
             local map = function(lhs, rhs, desc)
               vim.keymap.set('n', lhs, rhs, {
                 buffer = bufnr,
                 silent = true,
                 desc = 'Rust: ' .. desc,
               })
+            end
+
+            if client:supports_method('textDocument/inlayHint', bufnr) then
+              vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
+            end
+
+            if client:supports_method('textDocument/codeLens', bufnr) then
+              vim.lsp.codelens.enable(true, { bufnr = bufnr })
             end
 
             -- More powerful than ordinary LSP hover: the window is actionable.
@@ -54,6 +64,11 @@ return {
 
           default_settings = {
             ['rust-analyzer'] = {
+              check = {
+                command = 'clippy',
+                extraArgs = { '--no-deps' },
+              },
+
               completion = {
                 -- Complete a call with its argument placeholders.
                 fullFunctionSignatures = {
