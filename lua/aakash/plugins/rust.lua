@@ -150,6 +150,32 @@ return {
 
       dapui.setup {}
 
+      local debug_step_keymaps = {
+        { '<Down>', dap.step_over, '[D]ebug: step [O]ver' },
+        { '<Right>', dap.step_into, '[D]ebug: step [I]nto' },
+        { '<Left>', dap.step_out, '[D]ebug: step [O]ut' },
+        { '<Up>', dap.restart_frame, '[D]ebug: [R]estart frame' },
+      }
+
+      dap.listeners.after.event_initialized.rust_dap_step_keymaps = function()
+        for _, keymap in ipairs(debug_step_keymaps) do
+          vim.keymap.set('n', keymap[1], keymap[2], {
+            silent = true,
+            desc = keymap[3],
+          })
+        end
+      end
+
+      local function clear_debug_step_keymaps()
+        for _, keymap in ipairs(debug_step_keymaps) do
+          pcall(vim.keymap.del, 'n', keymap[1])
+        end
+      end
+
+      dap.listeners.before.event_terminated.rust_dap_step_keymaps = clear_debug_step_keymaps
+
+      dap.listeners.before.event_exited.rust_dap_step_keymaps = clear_debug_step_keymaps
+
       dap.listeners.before.attach.rust_dap_ui = function() dapui.open() end
 
       dap.listeners.before.launch.rust_dap_ui = function() dapui.open() end
