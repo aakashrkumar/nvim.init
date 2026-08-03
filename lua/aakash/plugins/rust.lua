@@ -162,6 +162,28 @@ return {
         desc = '[D]ebug: toggle [B]reakpoint',
       })
 
+      vim.keymap.set('n', '<leader>dB', function()
+        dap.set_breakpoint(vim.fn.input 'Breakpoint condition: ')
+      end, {
+        desc = '[D]ebug: conditional [B]reakpoint',
+      })
+
+      vim.keymap.set('n', '<leader>dh', function()
+        dap.set_breakpoint(nil, vim.fn.input 'Hit condition: ')
+      end, {
+        desc = '[D]ebug: breakpoint [H]it condition',
+      })
+
+      vim.keymap.set('n', '<leader>dl', function()
+        dap.set_breakpoint(nil, nil, vim.fn.input 'Log point message: ')
+      end, {
+        desc = '[D]ebug: [L]og point',
+      })
+
+      vim.keymap.set('n', '<leader>dr', dap.repl.open, {
+        desc = '[D]ebug: open [R]EPL',
+      })
+
       vim.keymap.set('n', '<leader>dc', dap.continue, {
         desc = '[D]ebug: [C]ontinue',
       })
