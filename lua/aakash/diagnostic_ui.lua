@@ -49,6 +49,7 @@ function M.format_message(diagnostic)
 	message = message:gsub("https?://%S+", "")
 	message = message:gsub("%s+`#%[warn%b()%]`.*$", "")
 	message = message:gsub("%s+#%[warn%b()%].*$", "")
+	message = message:gsub("%s+%[[^%]]+%]%s*$", "")
 	message = trim(message:gsub("%s+", " "))
 	if message == "" then
 		message = fallback
