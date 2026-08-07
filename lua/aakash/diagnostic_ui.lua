@@ -15,16 +15,6 @@ local function trim(value)
 	return (value:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
-local function first_non_empty_line(message)
-	for line in tostring(message or ""):gmatch("[^\r\n]+") do
-		line = trim(line)
-		if line ~= "" then
-			return line
-		end
-	end
-	return ""
-end
-
 local function truncate_display(value, max_width)
 	if vim.fn.strdisplaywidth(value) <= max_width then
 		return value
@@ -42,10 +32,11 @@ local function truncate_display(value, max_width)
 	return result .. suffix
 end
 
-function M.format_message(diagnostic)
-	local fallback = first_non_empty_line(diagnostic.message)
-	local message = fallback
-	message = message:gsub("%s+for further information visit%s+https?://%S+.*$", "")
+local function sanitize_line(line, diagnostic)
+	local message = trim(line)
+	message = message:gsub("^`?#%[warn%b()%]`?%s+on by default%s*$", "")
+	message = message:gsub("^`?#%[warn%b()%]`?%s*$", "")
+	message = message:gsub("%s*for further information visit%s+https?://%S+.*$", "")
 	message = message:gsub("https?://%S+", "")
 	message = message:gsub("%s+`#%[warn%b()%]`.*$", "")
 	message = message:gsub("%s+#%[warn%b()%].*$", "")
@@ -55,11 +46,17 @@ function M.format_message(diagnostic)
 			message = message:sub(1, #message - #code_suffix)
 		end
 	end
-	message = trim(message:gsub("%s+", " "))
-	if message == "" then
-		message = fallback
+	return trim(message:gsub("%s+", " "))
+end
+
+function M.format_message(diagnostic)
+	for line in tostring(diagnostic.message or ""):gmatch("[^\r\n]+") do
+		local message = sanitize_line(line, diagnostic)
+		if message ~= "" then
+			return truncate_display(message, max_message_width)
+		end
 	end
-	return truncate_display(message, max_message_width)
+	return ""
 end
 
 function M.select_diagnostic(diagnostics)
@@ -78,27 +75,30 @@ function M.select_diagnostic(diagnostics)
 	return selected
 end
 
-local function clear(bufnr)
-	if vim.api.nvim_buf_is_valid(bufnr) then
-		vim.api.nvim_buf_clear_namespace(bufnr, M.namespace, 0, -1)
+local function enabled_diagnostics(bufnr, line)
+	local diagnostics = {}
+	for _, diagnostic in ipairs(vim.diagnostic.get(bufnr, { lnum = line })) do
+		if
+			diagnostic.namespace == nil or vim.diagnostic.is_enabled({ bufnr = bufnr, ns_id = diagnostic.namespace })
+		then
+			diagnostics[#diagnostics + 1] = diagnostic
+		end
 	end
+	return diagnostics
 end
 
-function M.refresh(bufnr)
-	bufnr = bufnr or vim.api.nvim_get_current_buf()
-	clear(bufnr)
-
+local function decoration_for_window(winid, bufnr)
 	if
 		not enabled
 		or not vim.api.nvim_buf_is_valid(bufnr)
-		or vim.api.nvim_get_current_buf() ~= bufnr
+		or winid ~= vim.api.nvim_get_current_win()
 		or not vim.diagnostic.is_enabled({ bufnr = bufnr })
 	then
 		return
 	end
 
-	local cursor_line = vim.api.nvim_win_get_cursor(0)[1] - 1
-	local diagnostic = M.select_diagnostic(vim.diagnostic.get(bufnr, { lnum = cursor_line }))
+	local cursor_line = vim.api.nvim_win_get_cursor(winid)[1] - 1
+	local diagnostic = M.select_diagnostic(enabled_diagnostics(bufnr, cursor_line))
 	if not diagnostic then
 		return
 	end
@@ -109,15 +109,29 @@ function M.refresh(bufnr)
 	end
 
 	local highlight = severity_highlights[diagnostic.severity] or "DiagnosticVirtualTextHint"
-	vim.api.nvim_buf_set_extmark(bufnr, M.namespace, cursor_line, 0, {
-		virt_text = {
-			{ " ● ", highlight },
-			{ message .. " ", highlight },
-		},
-		virt_text_pos = "eol",
-		hl_mode = "combine",
-		priority = 2048,
-	})
+	return cursor_line,
+		{
+			virt_text = {
+				{ " ● ", highlight },
+				{ message .. " ", highlight },
+			},
+			virt_text_pos = "eol",
+			hl_mode = "combine",
+			priority = 2048,
+			ephemeral = true,
+		}
+end
+
+local function redraw(bufnr)
+	if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+		vim.api.nvim__redraw({ buf = bufnr, valid = false })
+	else
+		vim.api.nvim__redraw({ valid = false })
+	end
+end
+
+function M.refresh(bufnr)
+	redraw(bufnr or vim.api.nvim_get_current_buf())
 end
 
 function M.is_enabled()
@@ -126,28 +140,35 @@ end
 
 function M.toggle()
 	enabled = not enabled
-	if enabled then
-		M.refresh()
-	else
-		for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-			clear(bufnr)
-		end
-	end
+	redraw()
 	return enabled
 end
 
 function M.setup()
-	local group = vim.api.nvim_create_augroup("aakash-cursor-diagnostic", { clear = true })
-	vim.api.nvim_create_autocmd({ "DiagnosticChanged", "CursorMoved", "CursorMovedI", "BufEnter" }, {
-		group = group,
-		callback = function(event)
-			M.refresh(event.buf)
+	vim.api.nvim_set_decoration_provider(M.namespace, {
+		on_win = function(_, winid, bufnr)
+			local line, options = decoration_for_window(winid, bufnr)
+			if line then
+				vim.api.nvim_buf_set_extmark(bufnr, M.namespace, line, 0, options)
+			end
+			return false
 		end,
 	})
+
+	local group = vim.api.nvim_create_augroup("aakash-cursor-diagnostic", { clear = true })
+	vim.api.nvim_create_autocmd(
+		{ "DiagnosticChanged", "CursorMoved", "CursorMovedI", "BufEnter", "WinEnter", "WinLeave" },
+		{
+			group = group,
+			callback = function(event)
+				M.refresh(event.buf)
+			end,
+		}
+	)
 	vim.keymap.set("n", "<leader>td", M.toggle, {
 		desc = "[T]oggle cursor [D]iagnostic",
 	})
-	vim.schedule(M.refresh)
+	vim.schedule(redraw)
 end
 
 return M
