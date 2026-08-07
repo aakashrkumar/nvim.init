@@ -49,7 +49,12 @@ function M.format_message(diagnostic)
 	message = message:gsub("https?://%S+", "")
 	message = message:gsub("%s+`#%[warn%b()%]`.*$", "")
 	message = message:gsub("%s+#%[warn%b()%].*$", "")
-	message = message:gsub("%s+%[[^%]]+%]%s*$", "")
+	if diagnostic.code then
+		local code_suffix = " [" .. tostring(diagnostic.code) .. "]"
+		if message:sub(-#code_suffix) == code_suffix then
+			message = message:sub(1, #message - #code_suffix)
+		end
+	end
 	message = trim(message:gsub("%s+", " "))
 	if message == "" then
 		message = fallback
