@@ -3,7 +3,7 @@ local M = {}
 M.namespace = vim.api.nvim_create_namespace("aakash-cursor-diagnostic")
 
 local enabled = true
-local max_message_width = 64
+local minimum_message_width = 4
 local severity_highlights = {
 	[vim.diagnostic.severity.ERROR] = "DiagnosticVirtualTextError",
 	[vim.diagnostic.severity.WARN] = "DiagnosticVirtualTextWarn",
@@ -49,14 +49,67 @@ local function sanitize_line(line, diagnostic)
 	return trim(message:gsub("%s+", " "))
 end
 
-function M.format_message(diagnostic)
+local function split_display_line(value, max_width)
+	local prefix = ""
+	local char_count = vim.fn.strchars(value)
+	local last_break
+	for index = 0, char_count - 1 do
+		local character = vim.fn.strcharpart(value, index, 1)
+		if vim.fn.strdisplaywidth(prefix .. character) > max_width then
+			if prefix == "" then
+				return character, vim.fn.strcharpart(value, index + 1)
+			end
+			if character:match("%s") then
+				return (prefix:gsub("%s+$", "")), (vim.fn.strcharpart(value, index + 1):gsub("^%s+", ""))
+			end
+			if last_break and last_break > 0 then
+				return (vim.fn.strcharpart(value, 0, last_break):gsub("%s+$", "")),
+					(vim.fn.strcharpart(value, last_break):gsub("^%s+", ""))
+			end
+			return prefix, vim.fn.strcharpart(value, index)
+		end
+		prefix = prefix .. character
+		if character:match("%s") and prefix:find("%S") then
+			last_break = index
+		end
+	end
+	return value, ""
+end
+
+local function wrap_line(value, max_width)
+	max_width = math.max(minimum_message_width, max_width)
+	if value == "" then
+		return { "" }
+	end
+
+	local wrapped = {}
+	local remaining = value
+	while vim.fn.strdisplaywidth(remaining) > max_width do
+		local line, suffix = split_display_line(remaining, max_width)
+		wrapped[#wrapped + 1] = line
+		remaining = suffix
+	end
+	wrapped[#wrapped + 1] = remaining
+	return wrapped
+end
+
+function M.format_summary(diagnostic, max_width)
 	for line in tostring(diagnostic.message or ""):gmatch("[^\r\n]+") do
 		local message = sanitize_line(line, diagnostic)
 		if message ~= "" then
-			return truncate_display(message, max_message_width)
+			return truncate_display(message, math.max(minimum_message_width, max_width))
 		end
 	end
 	return ""
+end
+
+function M.wrap_message(message, max_width)
+	local wrapped = {}
+	for _, line in ipairs(vim.split(tostring(message or ""), "\n", { plain = true })) do
+		line = line:gsub("\r$", "")
+		vim.list_extend(wrapped, wrap_line(line, max_width))
+	end
+	return wrapped
 end
 
 function M.select_diagnostic(diagnostics)
@@ -103,7 +156,7 @@ local function decoration_for_window(winid, bufnr)
 		return
 	end
 
-	local message = M.format_message(diagnostic)
+	local message = M.format_summary(diagnostic, 64)
 	if message == "" then
 		return
 	end
