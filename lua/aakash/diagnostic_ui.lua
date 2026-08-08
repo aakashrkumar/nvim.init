@@ -3,6 +3,7 @@ local M = {}
 M.namespace = vim.api.nvim_create_namespace("aakash-cursor-diagnostic")
 
 local enabled = true
+local rendered_bufnr
 local minimum_message_width = 4
 local severity_highlights = {
 	[vim.diagnostic.severity.ERROR] = "DiagnosticVirtualTextError",
@@ -128,51 +129,105 @@ function M.select_diagnostic(diagnostics)
 	return selected
 end
 
-local function enabled_diagnostics(bufnr, line)
+local function window_text_width(winid)
+	local info = vim.fn.getwininfo(winid)[1]
+	local text_offset = info and info.textoff or 0
+	return math.max(12, vim.api.nvim_win_get_width(winid) - text_offset)
+end
+
+local function diagnostics_by_line(bufnr, cursor_line)
 	local diagnostics = {}
-	for _, diagnostic in ipairs(vim.diagnostic.get(bufnr, { lnum = line })) do
+	for _, diagnostic in ipairs(vim.diagnostic.get(bufnr)) do
+		local line = diagnostic.lnum
+		local severity = diagnostic.severity or vim.diagnostic.severity.HINT
+		local namespace_enabled = diagnostic.namespace == nil
+			or vim.diagnostic.is_enabled({ bufnr = bufnr, ns_id = diagnostic.namespace })
 		if
-			diagnostic.namespace == nil or vim.diagnostic.is_enabled({ bufnr = bufnr, ns_id = diagnostic.namespace })
+			line
+			and namespace_enabled
+			and (
+				severity == vim.diagnostic.severity.ERROR
+				or (line == cursor_line and severity == vim.diagnostic.severity.WARN)
+			)
 		then
-			diagnostics[#diagnostics + 1] = diagnostic
+			diagnostics[line] = diagnostics[line] or {}
+			diagnostics[line][#diagnostics[line] + 1] = diagnostic
 		end
 	end
 	return diagnostics
 end
 
-local function decoration_for_window(winid, bufnr)
-	if
-		not enabled
-		or not vim.api.nvim_buf_is_valid(bufnr)
-		or winid ~= vim.api.nvim_get_current_win()
-		or not vim.diagnostic.is_enabled({ bufnr = bufnr })
-	then
-		return
-	end
-
-	local cursor_line = vim.api.nvim_win_get_cursor(winid)[1] - 1
-	local diagnostic = M.select_diagnostic(enabled_diagnostics(bufnr, cursor_line))
-	if not diagnostic then
-		return
-	end
-
-	local message = M.format_summary(diagnostic, 64)
-	if message == "" then
-		return
-	end
-
+local function virtual_lines(diagnostic, width, expanded)
 	local highlight = severity_highlights[diagnostic.severity] or "DiagnosticVirtualTextHint"
-	return cursor_line,
-		{
-			virt_text = {
-				{ " ● ", highlight },
-				{ message .. " ", highlight },
-			},
-			virt_text_pos = "eol",
-			hl_mode = "combine",
-			priority = 2048,
-			ephemeral = true,
+	local prefix = " ● "
+	local continuation = string.rep(" ", vim.fn.strdisplaywidth(prefix))
+	local message_width = math.max(minimum_message_width, width - vim.fn.strdisplaywidth(prefix) - 1)
+	local messages
+	if expanded then
+		messages = M.wrap_message(diagnostic.message, message_width)
+	else
+		local summary = M.format_summary(diagnostic, message_width)
+		if summary == "" then
+			return
+		end
+		messages = { summary }
+	end
+
+	local lines = {}
+	for index, message in ipairs(messages) do
+		lines[#lines + 1] = {
+			{ index == 1 and prefix or continuation, highlight },
+			{ message, highlight },
 		}
+	end
+	return lines
+end
+
+local function clear_presentation()
+	if rendered_bufnr and vim.api.nvim_buf_is_valid(rendered_bufnr) then
+		vim.api.nvim_buf_clear_namespace(rendered_bufnr, M.namespace, 0, -1)
+	end
+	rendered_bufnr = nil
+end
+
+local function render_current_window()
+	clear_presentation()
+	if not enabled then
+		return
+	end
+
+	local winid = vim.api.nvim_get_current_win()
+	if not vim.api.nvim_win_is_valid(winid) then
+		return
+	end
+	local bufnr = vim.api.nvim_win_get_buf(winid)
+	if not vim.api.nvim_buf_is_valid(bufnr) or not vim.diagnostic.is_enabled({ bufnr = bufnr }) then
+		return
+	end
+
+	-- Virtual lines affect layout, so Neovim cannot render them as ephemeral decorations.
+	-- Keep the owned marks visible only in the active window instead.
+	vim.api.nvim__ns_set(M.namespace, { wins = { winid } })
+	rendered_bufnr = bufnr
+	local cursor_line = vim.api.nvim_win_get_cursor(winid)[1] - 1
+	local width = window_text_width(winid)
+	local diagnostics = diagnostics_by_line(bufnr, cursor_line)
+	local diagnostic_lines = vim.tbl_keys(diagnostics)
+	table.sort(diagnostic_lines)
+	for _, line in ipairs(diagnostic_lines) do
+		local diagnostic = M.select_diagnostic(diagnostics[line])
+		if diagnostic then
+			local lines = virtual_lines(diagnostic, width, line == cursor_line)
+			if lines then
+				vim.api.nvim_buf_set_extmark(bufnr, M.namespace, line, 0, {
+					virt_lines = lines,
+					virt_lines_overflow = "trunc",
+					hl_mode = "combine",
+					priority = 2048,
+				})
+			end
+		end
+	end
 end
 
 local function redraw(bufnr)
@@ -184,6 +239,7 @@ local function redraw(bufnr)
 end
 
 function M.refresh(bufnr)
+	render_current_window()
 	redraw(bufnr or vim.api.nvim_get_current_buf())
 end
 
@@ -193,35 +249,37 @@ end
 
 function M.toggle()
 	enabled = not enabled
-	redraw()
+	M.refresh()
 	return enabled
 end
 
 function M.setup()
-	vim.api.nvim_set_decoration_provider(M.namespace, {
-		on_win = function(_, winid, bufnr)
-			local line, options = decoration_for_window(winid, bufnr)
-			if line then
-				vim.api.nvim_buf_set_extmark(bufnr, M.namespace, line, 0, options)
-			end
-			return false
-		end,
-	})
+	for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(bufnr) then
+			vim.api.nvim_buf_clear_namespace(bufnr, M.namespace, 0, -1)
+		end
+	end
 
 	local group = vim.api.nvim_create_augroup("aakash-cursor-diagnostic", { clear = true })
-	vim.api.nvim_create_autocmd(
-		{ "DiagnosticChanged", "CursorMoved", "CursorMovedI", "BufEnter", "WinEnter", "WinLeave" },
-		{
-			group = group,
-			callback = function(event)
-				M.refresh(event.buf)
-			end,
-		}
-	)
+	vim.api.nvim_create_autocmd({
+		"DiagnosticChanged",
+		"CursorMoved",
+		"CursorMovedI",
+		"BufEnter",
+		"WinEnter",
+		"WinLeave",
+		"WinResized",
+		"WinScrolled",
+	}, {
+		group = group,
+		callback = function(event)
+			M.refresh(event.buf)
+		end,
+	})
 	vim.keymap.set("n", "<leader>td", M.toggle, {
 		desc = "[T]oggle cursor [D]iagnostic",
 	})
-	vim.schedule(redraw)
+	vim.schedule(M.refresh)
 end
 
 return M
