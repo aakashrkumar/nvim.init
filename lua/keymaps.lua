@@ -19,11 +19,13 @@ vim.diagnostic.config {
   signs = {
     severity = { min = vim.diagnostic.severity.WARN },
     text = {
-      [vim.diagnostic.severity.ERROR] = '●',
-      [vim.diagnostic.severity.WARN] = '●',
+      [vim.diagnostic.severity.ERROR] = '',
+      [vim.diagnostic.severity.WARN] = '',
+      [vim.diagnostic.severity.INFO] = '',
+      [vim.diagnostic.severity.HINT] = '',
     },
   },
-  underline = { severity = { min = vim.diagnostic.severity.WARN } },
+  underline = { severity = vim.diagnostic.severity.ERROR },
 
   virtual_text = false,
   virtual_lines = false,
@@ -38,8 +40,6 @@ vim.diagnostic.config {
     end,
   },
 }
-
-require('aakash.diagnostic_ui').setup()
 
 vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 

@@ -65,6 +65,21 @@ return {
 
       -- See `:help telescope.builtin`
       local builtin = require 'telescope.builtin'
+
+      -- Snacks normally matches each document symbol by its own name. Add its
+      -- ancestors to the hidden match text so searching for a type such as
+      -- `Hex` also keeps that type's fields and methods in the result tree.
+      local function add_symbol_ancestors(item)
+        local parent = item.parent
+        while parent and not parent.root do
+          if parent.name and parent.name ~= '' then
+            item.text = item.text .. ' ' .. parent.name
+          end
+          parent = parent.parent
+        end
+        return item
+      end
+
       vim.keymap.set('n', '<leader>sh', builtin.help_tags, { desc = '[S]earch [H]elp' })
       vim.keymap.set('n', '<leader>sk', builtin.keymaps, { desc = '[S]earch [K]eymaps' })
       vim.keymap.set('n', '<leader>sf', builtin.find_files, { desc = '[S]earch [F]iles' })
@@ -77,10 +92,11 @@ return {
       vim.keymap.set('n', '<leader>sc', builtin.commands, { desc = '[S]earch [C]ommands' })
       vim.keymap.set('n', '<leader><leader>', builtin.buffers, { desc = '[ ] Find existing buffers' })
 
-      -- Add Telescope-based LSP pickers when an LSP attaches to a buffer.
-      -- If you later switch picker plugins, this is where to update these mappings.
+      -- Add LSP pickers when an LSP attaches to a buffer. Snacks owns symbol
+      -- and implementation navigation; Telescope remains useful for the other
+      -- LSP results and the general-purpose searches above.
       vim.api.nvim_create_autocmd('LspAttach', {
-        group = vim.api.nvim_create_augroup('telescope-lsp-attach', { clear = true }),
+        group = vim.api.nvim_create_augroup('navigation-lsp-attach', { clear = true }),
         callback = function(event)
           local buf = event.buf
 
@@ -95,7 +111,10 @@ return {
 
           -- Jump to the implementation of the word under your cursor.
           -- Useful when your language has ways of declaring types without an actual implementation.
-          vim.keymap.set('n', 'gri', builtin.lsp_implementations, { buffer = buf, desc = '[G]oto [I]mplementation' })
+          vim.keymap.set('n', 'gri', function() Snacks.picker.lsp_implementations() end, {
+            buffer = buf,
+            desc = '[G]oto [I]mplementation (Snacks)',
+          })
 
           -- Jump to the definition of the word under your cursor.
           -- This is where a variable was first declared, or where a function is defined, etc.
@@ -104,11 +123,23 @@ return {
 
           -- Fuzzy find all the symbols in your current document.
           -- Symbols are things like variables, functions, types, etc.
-          vim.keymap.set('n', 'gO', builtin.lsp_document_symbols, { buffer = buf, desc = 'Open Document Symbols' })
+          vim.keymap.set('n', 'gO', function()
+            Snacks.picker.lsp_symbols {
+              tree = true,
+              keep_parents = true,
+              -- rust-analyzer represents `impl` blocks as Object symbols.
+              -- Keep them so their methods retain the source hierarchy.
+              filter = { rust = true },
+              transform = add_symbol_ancestors,
+            }
+          end, { buffer = buf, desc = 'Open Document Symbols (Snacks)' })
 
           -- Fuzzy find all the symbols in your current workspace.
           -- Similar to document symbols, except searches over your entire project.
-          vim.keymap.set('n', 'gW', builtin.lsp_dynamic_workspace_symbols, { buffer = buf, desc = 'Open Workspace Symbols' })
+          vim.keymap.set('n', 'gW', function() Snacks.picker.lsp_workspace_symbols() end, {
+            buffer = buf,
+            desc = 'Open Workspace Symbols (Snacks)',
+          })
 
           -- Jump to the type of the word under your cursor.
           -- Useful when you're not sure what type a variable is and you want to see
