@@ -67,11 +67,30 @@ return {
 		"folke/snacks.nvim",
 		priority = 1000,
 		lazy = false,
+		keys = {
+			{
+				"]w",
+				function()
+					Snacks.words.jump(vim.v.count1)
+				end,
+				mode = "n",
+				desc = "Next word reference",
+			},
+			{
+				"[w",
+				function()
+					Snacks.words.jump(-vim.v.count1)
+				end,
+				mode = "n",
+				desc = "Previous word reference",
+			},
+		},
 		opts = {
 			-- Mostly invisible performance/robustness improvements.
 			bigfile = { enabled = true },
 			quickfile = { enabled = true },
 			picker = { enabled = true },
+			words = { enabled = true, modes = { 'n' }, debounce = 300 },
 			-- Cleaner prompts and notifications.
 			input = { enabled = true },
 			notifier = {

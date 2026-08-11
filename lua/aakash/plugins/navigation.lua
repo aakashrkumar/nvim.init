@@ -295,4 +295,90 @@ return {
       table.insert(opts.spec, { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } })
     end,
   },
+
+  -- [[ Search and replace ]]
+  {
+    'MagicDuck/grug-far.nvim',
+    cmd = { 'GrugFar', 'GrugFarWithin' },
+    opts = {},
+    keys = {
+      {
+        '<leader>sR',
+        function() require('grug-far').open() end,
+        desc = '[S]earch and [R]eplace',
+      },
+      {
+        '<leader>sR',
+        function() require('grug-far').with_visual_selection() end,
+        mode = 'v',
+        desc = '[S]earch and [R]eplace',
+      },
+    },
+  },
+
+  -- [[ Quickfix ]]
+  {
+    'stevearc/quicker.nvim',
+    ft = 'qf',
+    opts = {
+      keys = {
+        {
+          '>',
+          function() require('quicker').expand { before = 2, after = 2, add_to_existing = true } end,
+          desc = 'Expand quickfix context',
+        },
+        {
+          '<',
+          function() require('quicker').collapse() end,
+          desc = 'Collapse quickfix context',
+        },
+      },
+    },
+    keys = {
+      {
+        '<leader>q',
+        function() require('quicker').toggle() end,
+        desc = '[Q]uickfix',
+      },
+    },
+  },
+
+  -- [[ Enhanced jump motions ]]
+  {
+    'folke/flash.nvim',
+    event = 'VeryLazy',
+    opts = {},
+    keys = {
+      {
+        '<leader>j',
+        function() require('flash').jump() end,
+        mode = { 'n', 'x', 'o' },
+        desc = 'Flash jump',
+      },
+      {
+        '<leader>J',
+        function() require('flash').treesitter() end,
+        mode = { 'n', 'x', 'o' },
+        desc = 'Flash Treesitter',
+      },
+      {
+        'r',
+        function() require('flash').remote() end,
+        mode = 'o',
+        desc = 'Remote Flash',
+      },
+      {
+        'R',
+        function() require('flash').treesitter_search() end,
+        mode = { 'o', 'x' },
+        desc = 'Flash Treesitter search',
+      },
+      {
+        '<C-s>',
+        function() require('flash').toggle() end,
+        mode = 'c',
+        desc = 'Toggle Flash search',
+      },
+    },
+  },
 }

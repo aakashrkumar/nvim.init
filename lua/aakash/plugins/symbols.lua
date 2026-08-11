@@ -20,6 +20,16 @@ local symbol_kinds = {
 }
 
 return {
+	{
+		"Bekaboo/dropbar.nvim",
+		lazy = false,
+		config = function()
+			vim.keymap.set("n", "<leader>;", require("dropbar.api").pick, { desc = "Pick dropbar context" })
+			vim.keymap.set("n", "[;", require("dropbar.api").goto_context_start, { desc = "Go to context start" })
+			vim.keymap.set("n", "];", require("dropbar.api").select_next_context, { desc = "Select next context" })
+		end,
+	},
+
 	-- A transient outline for browsing the current buffer as a hierarchy.
 	{
 		"stevearc/aerial.nvim",

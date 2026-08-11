@@ -129,8 +129,28 @@ return {
 
       require('mini.pairs').setup()
       require('mini.splitjoin').setup()
+      require('mini.align').setup()
+
+      local visits = require 'mini.visits'
+      visits.setup()
+      vim.keymap.set('n', '<leader>sv', function() visits.select_path() end, { desc = '[S]earch [V]isited files' })
       -- ... and there is more!
       --  Check out: https://github.com/nvim-mini/mini.nvim
+    end,
+  },
+
+  {
+    'monaqa/dial.nvim',
+    config = function()
+      local dial_map = require 'dial.map'
+      vim.keymap.set('n', '<C-a>', function() dial_map.manipulate('increment', 'normal') end)
+      vim.keymap.set('n', '<C-x>', function() dial_map.manipulate('decrement', 'normal') end)
+      vim.keymap.set('n', 'g<C-a>', function() dial_map.manipulate('increment', 'gnormal') end)
+      vim.keymap.set('n', 'g<C-x>', function() dial_map.manipulate('decrement', 'gnormal') end)
+      vim.keymap.set('x', '<C-a>', function() dial_map.manipulate('increment', 'visual') end)
+      vim.keymap.set('x', '<C-x>', function() dial_map.manipulate('decrement', 'visual') end)
+      vim.keymap.set('x', 'g<C-a>', function() dial_map.manipulate('increment', 'gvisual') end)
+      vim.keymap.set('x', 'g<C-x>', function() dial_map.manipulate('decrement', 'gvisual') end)
     end,
   },
 
