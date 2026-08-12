@@ -38,6 +38,10 @@ return {
 		priority = 1000,
 		config = function()
 			require("catppuccin").setup({
+				transparent_background = true,
+				float = {
+					transparent = true,
+				},
 				lsp_styles = {
 					inlay_hints = {
 						background = false,
