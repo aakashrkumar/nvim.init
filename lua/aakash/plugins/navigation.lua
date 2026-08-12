@@ -1,4 +1,22 @@
 return {
+  -- [[ Split navigation across Neovim and tmux ]]
+  {
+    'mrjones2014/smart-splits.nvim',
+    lazy = false,
+    opts = {
+      multiplexer_integration = 'tmux',
+    },
+    config = function(_, opts)
+      local smart_splits = require 'smart-splits'
+      smart_splits.setup(opts)
+
+      vim.keymap.set('n', '<C-h>', smart_splits.move_cursor_left, { desc = 'Move focus left' })
+      vim.keymap.set('n', '<C-j>', smart_splits.move_cursor_down, { desc = 'Move focus down' })
+      vim.keymap.set('n', '<C-k>', smart_splits.move_cursor_up, { desc = 'Move focus up' })
+      vim.keymap.set('n', '<C-l>', smart_splits.move_cursor_right, { desc = 'Move focus right' })
+    end,
+  },
+
   -- ============================================================
   -- SEARCH & NAVIGATION
   -- Telescope setup, keymaps, LSP picker mappings

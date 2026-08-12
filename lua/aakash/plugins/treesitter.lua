@@ -77,34 +77,38 @@ return {
 
       local modes = { 'n', 'x', 'o' }
       local mappings = {
-        [']m'] = { 'goto_next_start', 'Next function start' },
-        [']M'] = { 'goto_next_end', 'Next function end' },
-        ['[m'] = { 'goto_previous_start', 'Previous function start' },
-        ['[M'] = { 'goto_previous_end', 'Previous function end' },
+        [']m'] = { method = 'goto_next_start', capture = '@function.outer', desc = 'Next function start' },
+        [']M'] = { method = 'goto_next_end', capture = '@function.outer', desc = 'Next function end' },
+        ['[m'] = { method = 'goto_previous_start', capture = '@function.outer', desc = 'Previous function start' },
+        ['[M'] = { method = 'goto_previous_end', capture = '@function.outer', desc = 'Previous function end' },
+        [']a'] = { method = 'goto_next_start', capture = '@parameter.inner', desc = 'Next argument start' },
+        [']A'] = { method = 'goto_next_end', capture = '@parameter.inner', desc = 'Next argument end' },
+        ['[a'] = { method = 'goto_previous_start', capture = '@parameter.inner', desc = 'Previous argument start' },
+        ['[A'] = { method = 'goto_previous_end', capture = '@parameter.inner', desc = 'Previous argument end' },
       }
 
-      local function set_function_mappings(buf)
+      local function set_textobject_mappings(buf)
         for lhs, mapping in pairs(mappings) do
           vim.keymap.set(modes, lhs, function()
-            require('nvim-treesitter-textobjects.move')[mapping[1]]('@function.outer', 'textobjects')
-          end, { buffer = buf, desc = mapping[2] })
+            require('nvim-treesitter-textobjects.move')[mapping.method](mapping.capture, 'textobjects')
+          end, { buffer = buf, desc = mapping.desc })
         end
       end
 
       -- Global fallbacks also cover untyped buffers. Reassert buffer-local maps
       -- after FileType so language ftplugins cannot replace these motions.
-      set_function_mappings(nil)
+      set_textobject_mappings(nil)
       local group = vim.api.nvim_create_augroup('TreesitterTextobjectsMappings', { clear = true })
       vim.api.nvim_create_autocmd('FileType', {
         group = group,
         callback = function(args)
           vim.schedule(function()
-            if vim.api.nvim_buf_is_valid(args.buf) then set_function_mappings(args.buf) end
+            if vim.api.nvim_buf_is_valid(args.buf) then set_textobject_mappings(args.buf) end
           end)
         end,
       })
       for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].filetype ~= '' then set_function_mappings(buf) end
+        if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].filetype ~= '' then set_textobject_mappings(buf) end
       end
     end,
   },
