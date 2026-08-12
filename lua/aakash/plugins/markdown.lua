@@ -72,11 +72,71 @@ return {
     },
   },
 
+  -- Vault-aware navigation and note creation for the active Obsidian vault.
+  -- Generic Markdown editing and rendering remain owned by the plugins above.
+  {
+    'obsidian-nvim/obsidian.nvim',
+    version = '*',
+    lazy = false,
+    keys = {
+      { '<leader>oq', '<cmd>Obsidian quick_switch<CR>', desc = '[O]bsidian: [Q]uick switch' },
+      { '<leader>os', '<cmd>Obsidian search<CR>', desc = '[O]bsidian: [S]earch vault' },
+      { '<leader>ot', '<cmd>Obsidian today<CR>', desc = '[O]bsidian: [T]oday' },
+      { '<leader>on', '<cmd>Obsidian new<CR>', desc = '[O]bsidian: [N]ew note' },
+      { '<leader>ob', '<cmd>Obsidian backlinks<CR>', desc = '[O]bsidian: [B]acklinks' },
+      { '<leader>oo', '<cmd>Obsidian open<CR>', desc = '[O]bsidian: [O]pen in app' },
+    },
+    opts = {
+      legacy_commands = false,
+      workspaces = {
+        {
+          name = 'main',
+          path = '~/Documents/Notes/Main',
+        },
+      },
+      notes_subdir = '010.Inbox',
+      new_notes_location = 'notes_subdir',
+      note_id_func = function(title)
+        local trimmed_title = title and vim.trim(title)
+        if trimmed_title and trimmed_title ~= '' then return trimmed_title end
+        return require('obsidian.builtin').zettel_id()
+      end,
+      picker = {
+        name = 'snacks.picker',
+      },
+      templates = {
+        folder = 'Settings/Templates',
+      },
+      daily_notes = {
+        folder = '100.Daily',
+        template = 'New Daily Note.md',
+        default_tags = {},
+        workdays_only = false,
+      },
+      attachments = {
+        folder = '700.Resources/709.Attachments',
+      },
+      frontmatter = {
+        enabled = false,
+      },
+      ui = {
+        enable = false,
+      },
+      footer = {
+        enabled = false,
+      },
+      statusline = {
+        enabled = false,
+      },
+    },
+  },
+
   {
     'folke/which-key.nvim',
     opts = function(_, opts)
       opts.spec = opts.spec or {}
       table.insert(opts.spec, { '<leader>m', group = '[M]arkdown' })
+      table.insert(opts.spec, { '<leader>o', group = '[O]bsidian' })
     end,
   },
 }
