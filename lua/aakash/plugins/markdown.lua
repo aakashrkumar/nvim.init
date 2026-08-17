@@ -52,15 +52,26 @@ return {
 				desc = "Markdown writing settings",
 				group = vim.api.nvim_create_augroup("markdown-writing", { clear = true }),
 				pattern = "markdown",
-				callback = function()
+				callback = function(args)
 					-- Visually wrap long paragraphs without altering the file.
 					vim.opt_local.wrap = true
 					vim.opt_local.linebreak = true
 					vim.opt_local.breakindent = true
 
-					-- Enable Neovim's built-in spell checker.
-					vim.opt_local.spell = true
+					-- Keep spelling diagnostics hidden until explicitly requested.
+					vim.opt_local.spell = false
 					vim.opt_local.spelllang = "en_us"
+
+					-- Markdown's runtime syntax loads later in this FileType event.
+					local bufnr = args.buf
+					vim.schedule(function()
+						if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= "markdown" then
+							return
+						end
+						vim.api.nvim_buf_call(bufnr, function()
+							vim.cmd.syntax([[match MarkdownSelfNote /{[^{}]*}/ contains=@Spell]])
+						end)
+					end)
 
 					-- Do not automatically insert hard line breaks.
 					vim.opt_local.textwidth = 0
@@ -95,6 +106,7 @@ return {
 				map("n", "<leader>mo", "<cmd>MDListItemBelow<CR>", "Markdown: list item below")
 				map("n", "<leader>mO", "<cmd>MDListItemAbove<CR>", "Markdown: list item above")
 				map("n", "<leader>mc", "<cmd>MDToc<CR>", "Markdown: show table of contents")
+				map("n", "<leader>ts", "<cmd>setlocal spell! spell?<CR>", "[T]oggle [S]pelling")
 				map("n", "<leader>tw", function()
 					Snacks.zen()
 				end, "Toggle writing view")

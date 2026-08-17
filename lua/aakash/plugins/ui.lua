@@ -83,6 +83,7 @@ return {
 				},
 				custom_highlights = function(colors)
 					return {
+						MarkdownSelfNote = { fg = colors.overlay2, style = { "italic" } },
 						WritingView = { bg = colors.base },
 						WritingViewBorder = { fg = colors.surface0, bg = colors.base },
 						WritingViewGutter = { bg = colors.base },
@@ -222,7 +223,6 @@ return {
 						wrap = true,
 						linebreak = true,
 						breakindent = true,
-						spell = true,
 					},
 				},
 			},

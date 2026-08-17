@@ -128,6 +128,11 @@ return {
       vim.keymap.set('n', '<leader>e', function() MiniFiles.open() end, { desc = 'File [E]xplorer (cwd)' })
 
       require('mini.pairs').setup()
+      require('mini.bracketed').setup {
+        -- Keep existing word-reference and persistent yank-history navigation.
+        window = { suffix = '' },
+        yank = { suffix = '' },
+      }
       require('mini.splitjoin').setup()
       require('mini.align').setup()
 
