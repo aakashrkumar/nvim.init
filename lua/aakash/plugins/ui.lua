@@ -134,6 +134,74 @@ return {
 		opts = {
 			-- Mostly invisible performance/robustness improvements.
 			bigfile = { enabled = true },
+			image = {
+				enabled = true,
+				doc = {
+					auto_resize = true,
+					-- Snacks anchors document images at their source column. Shift only
+					-- block-math extmarks after rendering; inline math stays inline.
+					on_update_pre = function(placement)
+						local range = placement.opts.range
+						if vim.bo[placement.buf].filetype ~= "markdown" or placement.opts.type ~= "math" or not range then return end
+
+						local is_block = range[1] ~= range[3]
+						if not is_block then
+							local line = vim.api.nvim_buf_get_lines(placement.buf, range[1] - 1, range[1], false)[1] or ""
+							is_block = line:sub(range[2] + 1, range[4]):sub(1, 2) == "$$"
+						end
+						if not is_block then return end
+
+						vim.schedule(function()
+							if not placement:ready() then return end
+							local state = placement:state()
+							if state.hidden or #state.wins == 0 then return end
+
+							local width
+							for _, win in ipairs(state.wins) do
+								local info = vim.fn.getwininfo(win)[1]
+								local text_width = info.width - info.textoff
+								width = width and math.min(width, text_width) or text_width
+							end
+
+							local column = math.max(0, math.floor((width - state.loc.width) / 2))
+							local padding = string.rep(" ", column)
+							local namespace = Snacks.image.placement.ns
+							for _, id in ipairs(placement.eids) do
+								local mark = vim.api.nvim_buf_get_extmark_by_id(placement.buf, namespace, id, { details = true })
+								local details = mark[3]
+								local changed = false
+								if details and details.virt_text then
+									details.virt_text_win_col = column
+									details.virt_text_pos = nil
+									changed = true
+								end
+								if details and details.virt_lines then
+									for _, virtual_line in ipairs(details.virt_lines) do
+										if virtual_line[1] and virtual_line[1][2] == nil then
+											virtual_line[1][1] = padding
+										else
+											table.insert(virtual_line, 1, { padding })
+										end
+									end
+									changed = true
+								end
+								if changed then
+									details.id = id
+									details.ns_id = nil
+									details.invalid = nil
+									vim.api.nvim_buf_set_extmark(placement.buf, namespace, mark[1], mark[2], details)
+								end
+							end
+						end)
+					end,
+				},
+				resolve = function(file, src)
+					local vault = vim.fs.root(file, ".obsidian")
+					if not vault then return nil end
+					local attachment = vim.fs.joinpath(vault, "700.Resources", "709.Attachments", src)
+					return vim.uv.fs_stat(attachment) and attachment or nil
+				end,
+			},
 			quickfile = { enabled = true },
 			picker = { enabled = true },
 			words = { enabled = true, modes = { "n" }, debounce = 300 },

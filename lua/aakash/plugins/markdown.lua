@@ -26,6 +26,8 @@ return {
 						virtual_lines = true,
 					},
 				},
+				-- Snacks.image owns graphical LaTeX rendering.
+				latex = { enabled = false },
 
 				-- Provides checkbox and callout completion through blink.cmp.
 				completions = {
