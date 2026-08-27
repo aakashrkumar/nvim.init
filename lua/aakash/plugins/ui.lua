@@ -56,7 +56,7 @@ return {
 	-- Change the name of the colorscheme plugin below, and then
 	-- change the command under that to load whatever the name of that colorscheme is.
 	--
-	-- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
+	-- If you want to see what colorschemes are already installed, run `:lua Snacks.picker.colorschemes()`.
 	-- {
 	--   'folke/tokyonight.nvim',
 	--   opts = {
@@ -142,19 +142,32 @@ return {
 					-- block-math extmarks after rendering; inline math stays inline.
 					on_update_pre = function(placement)
 						local range = placement.opts.range
-						if vim.bo[placement.buf].filetype ~= "markdown" or placement.opts.type ~= "math" or not range then return end
+						if
+							vim.bo[placement.buf].filetype ~= "markdown"
+							or placement.opts.type ~= "math"
+							or not range
+						then
+							return
+						end
 
 						local is_block = range[1] ~= range[3]
 						if not is_block then
-							local line = vim.api.nvim_buf_get_lines(placement.buf, range[1] - 1, range[1], false)[1] or ""
+							local line = vim.api.nvim_buf_get_lines(placement.buf, range[1] - 1, range[1], false)[1]
+								or ""
 							is_block = line:sub(range[2] + 1, range[4]):sub(1, 2) == "$$"
 						end
-						if not is_block then return end
+						if not is_block then
+							return
+						end
 
 						vim.schedule(function()
-							if not placement:ready() then return end
+							if not placement:ready() then
+								return
+							end
 							local state = placement:state()
-							if state.hidden or #state.wins == 0 then return end
+							if state.hidden or #state.wins == 0 then
+								return
+							end
 
 							local width
 							for _, win in ipairs(state.wins) do
@@ -167,7 +180,8 @@ return {
 							local padding = string.rep(" ", column)
 							local namespace = Snacks.image.placement.ns
 							for _, id in ipairs(placement.eids) do
-								local mark = vim.api.nvim_buf_get_extmark_by_id(placement.buf, namespace, id, { details = true })
+								local mark =
+									vim.api.nvim_buf_get_extmark_by_id(placement.buf, namespace, id, { details = true })
 								local details = mark[3]
 								local changed = false
 								if details and details.virt_text then
@@ -197,7 +211,9 @@ return {
 				},
 				resolve = function(file, src)
 					local vault = vim.fs.root(file, ".obsidian")
-					if not vault then return nil end
+					if not vault then
+						return nil
+					end
 					local attachment = vim.fs.joinpath(vault, "700.Resources", "709.Attachments", src)
 					return vim.uv.fs_stat(attachment) and attachment or nil
 				end,
