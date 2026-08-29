@@ -29,23 +29,13 @@
 -- If you're wondering about lsp vs treesitter, you can check out the wonderfully
 -- and elegantly composed help section, `:help lsp-vs-treesitter`
 
--- Enable the following language servers
---  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
---  See `:help lsp-config` for information about keys and how to configure
+-- General-purpose servers live here. Language modules extend this registry
+-- through lazy.nvim's merged `opts` instead of creating a second LSP setup path.
+-- See `:help lsp-config` for server configuration details.
 ---@type table<string, vim.lsp.Config>
 local servers = {
   clangd = {},
   -- gopls = {},
-  -- pyright = {},
-  basedpyright = {
-    settings = {
-      basedpyright = {
-        disableOrganizeImports = true,
-      },
-    },
-  },
-  ruff = {},
-  jdtls = {},
   --
   -- Some languages (like typescript) have entire language plugins that can be useful:
   --    https://github.com/pmizio/typescript-tools.nvim
@@ -94,7 +84,7 @@ local servers = {
 }
 
 -- Automatically install LSPs and related tools to stdpath for Neovim
-local ensure_installed = vim.tbl_keys(servers or {})
+local ensure_installed = vim.tbl_keys(servers)
 vim.list_extend(ensure_installed, {
   -- You can add other tools here that you want Mason to install
   'clang-format',
@@ -129,6 +119,7 @@ return {
       {
         'WhoIsSethDaniel/mason-tool-installer.nvim',
         opts = { ensure_installed = ensure_installed },
+        opts_extend = { 'ensure_installed' },
       },
       { 'neovim/nvim-lspconfig' },
       {
@@ -138,11 +129,16 @@ return {
       },
     },
     opts = {
-      -- Translates between nvim-lspconfig server names and mason.nvim package names (e.g. lua_ls <-> lua-language-server)
-      automatic_enable = false, -- Change this to true if you want to automatically enable servers that are installed manually (e.g. via :Mason / :MasonInstall)
+      -- Translates between nvim-lspconfig server names and Mason package names
+      -- (for example, lua_ls <-> lua-language-server).
+      automatic_enable = false,
+      servers = servers,
     },
     config = function(_, opts)
-      require('mason-lspconfig').setup(opts)
+      local configured_servers = opts.servers or {}
+      local mason_opts = vim.deepcopy(opts)
+      mason_opts.servers = nil
+      require('mason-lspconfig').setup(mason_opts)
 
       --  This function gets run when an LSP attaches to a particular buffer.
       --    That is to say, every time a new file is opened that is associated with
@@ -181,8 +177,6 @@ return {
           --  For example, in C this would take you to the header.
           map('grD', vim.lsp.buf.declaration, '[G]oto [D]eclaration')
 
-          if client and client.name == 'ruff' then client.server_capabilities.hoverProvider = false end
-
           -- The following code creates a keymap to toggle inlay hints in your
           -- code, if the language server you are using supports them
           --
@@ -200,7 +194,7 @@ return {
       --    :Mason
       --
       -- You can press `g?` for help in this menu.
-      for name, server in pairs(servers) do
+      for name, server in pairs(configured_servers) do
         vim.lsp.config(name, server)
         vim.lsp.enable(name)
       end
@@ -211,7 +205,10 @@ return {
     'folke/which-key.nvim',
     opts = function(_, opts)
       opts.spec = opts.spec or {}
-      table.insert(opts.spec, { 'gr', group = 'LSP Actions', mode = { 'n' } })
+      vim.list_extend(opts.spec, {
+        { '<leader>c', group = '[C]ode' },
+        { 'gr', group = 'LSP Actions', mode = { 'n' } },
+      })
     end,
   },
 }

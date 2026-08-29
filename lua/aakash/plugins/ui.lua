@@ -97,14 +97,15 @@ return {
 		end,
 	},
 
-	{
-		"sphamba/smear-cursor.nvim",
-		opts = {
-			stiffness = 0.8,
-			trailing_stiffness = 0.5,
-			distance_stop_animating = 0.5,
-		},
-	},
+	-- Disabled: rapid scrolling can backlog its animations and freeze Neovim.
+	-- {
+	-- 	"sphamba/smear-cursor.nvim",
+	-- 	opts = {
+	-- 		stiffness = 0.8,
+	-- 		trailing_stiffness = 0.5,
+	-- 		distance_stop_animating = 0.5,
+	-- 	},
+	-- },
 
 	-- Snacks
 	-- Snacks' official lazy.nvim example keeps the plugin eager because some of

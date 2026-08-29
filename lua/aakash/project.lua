@@ -17,6 +17,7 @@ M.patterns = {
 	"pom.xml",
 	"build.gradle",
 	"build.gradle.kts",
+	"build.xml",
 	".clangd",
 	"compile_commands.json",
 	".luarc.json",
