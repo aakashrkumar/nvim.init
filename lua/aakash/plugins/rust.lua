@@ -22,8 +22,6 @@ return {
         },
 
         server = {
-          capabilities = require('blink.cmp').get_lsp_capabilities(),
-
           on_attach = function(client, bufnr)
             local map = function(lhs, rhs, desc)
               vim.keymap.set('n', lhs, rhs, {
@@ -73,16 +71,12 @@ return {
               },
 
               completion = {
-                -- Complete a call with its argument placeholders.
+                -- Show complete function and method signatures in completion documentation.
                 fullFunctionSignatures = {
                   enable = true,
                 },
-
-                -- Can synthesize small expressions matching the expected type.
-                -- Powerful, but occasionally adds completion noise.
-                termSearch = {
-                  enable = true,
-                },
+                -- Keep obsolete APIs out of completion results.
+                hideDeprecated = true,
               },
 
               files = {

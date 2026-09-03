@@ -84,6 +84,13 @@ return {
 				custom_highlights = function(colors)
 					return {
 						MarkdownSelfNote = { fg = colors.overlay2, style = { "italic" } },
+						BlinkCmpMenu = { fg = colors.text, bg = colors.mantle },
+						BlinkCmpMenuBorder = { fg = colors.surface1, bg = colors.none },
+						BlinkCmpDoc = { fg = colors.text, bg = colors.mantle },
+						BlinkCmpDocBorder = { fg = colors.surface1, bg = colors.none },
+						BlinkCmpDocSeparator = { fg = colors.surface0, bg = colors.mantle },
+						BlinkCmpSignatureHelp = { fg = colors.text, bg = colors.mantle },
+						BlinkCmpSignatureHelpBorder = { fg = colors.surface1, bg = colors.none },
 						WritingView = { bg = colors.base },
 						WritingViewBorder = { fg = colors.surface0, bg = colors.base },
 						WritingViewGutter = { bg = colors.base },

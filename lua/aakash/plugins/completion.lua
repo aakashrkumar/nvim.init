@@ -33,6 +33,19 @@ return {
 	{
 		"saghen/blink.cmp",
 		version = "1.*",
+		dependencies = {
+			{
+				"xzbdmw/colorful-menu.nvim",
+				opts = {
+					max_width = 48,
+					ls = {
+						["rust-analyzer"] = {
+							align_type_to_right = false,
+						},
+					},
+				},
+			},
+		},
 		opts = {
 			keymap = {
 				-- 'default' (recommended) for mappings similar to built-in completions
@@ -69,9 +82,34 @@ return {
 			},
 
 			completion = {
-				-- By default, you may press `<c-space>` to show the documentation.
-				-- Optionally, set `auto_show = true` to show the documentation after a delay.
-				documentation = { auto_show = true, auto_show_delay_ms = 400 },
+				keyword = { range = "full" },
+				list = {
+					selection = {
+						preselect = true,
+						auto_insert = false,
+					},
+				},
+				menu = {
+					border = "rounded",
+					draw = {
+						columns = { { "kind_icon" }, { "label", gap = 1 }, { "kind" } },
+						components = {
+							label = {
+								text = function(ctx)
+									return require("colorful-menu").blink_components_text(ctx)
+								end,
+								highlight = function(ctx)
+									return require("colorful-menu").blink_components_highlight(ctx)
+								end,
+							},
+						},
+					},
+				},
+				documentation = {
+					auto_show = true,
+					auto_show_delay_ms = 400,
+					window = { border = "rounded" },
+				},
 			},
 
 			sources = {
@@ -97,7 +135,10 @@ return {
 			fuzzy = { implementation = "prefer_rust_with_warning" },
 
 			-- Shows a signature help window while you type arguments for a function
-			signature = { enabled = true },
+			signature = {
+				enabled = true,
+				window = { border = "rounded" },
+			},
 		},
 	},
 }
