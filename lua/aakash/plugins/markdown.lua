@@ -1,3 +1,5 @@
+local obsidian_vault = vim.fn.expand '~/Documents/Notes/Main'
+
 return {
   -- [[ Markdown ]]
   {
@@ -114,6 +116,8 @@ return {
     'obsidian-nvim/obsidian.nvim',
     version = '*',
     lazy = false,
+    -- Keep vault integration unloaded on machines without this directory.
+    cond = vim.fn.isdirectory(obsidian_vault) == 1,
     keys = {
       { '<leader>oq', '<cmd>Obsidian quick_switch<CR>', desc = '[O]bsidian: [Q]uick switch' },
       { '<leader>os', '<cmd>Obsidian search<CR>', desc = '[O]bsidian: [S]earch vault' },
@@ -127,7 +131,7 @@ return {
       workspaces = {
         {
           name = 'main',
-          path = '~/Documents/Notes/Main',
+          path = obsidian_vault,
         },
       },
       notes_subdir = '010.Inbox',
