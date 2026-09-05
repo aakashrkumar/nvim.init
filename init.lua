@@ -89,18 +89,18 @@ P.S. You can delete this when you're done too. It's your config now! :)
 
 -- [[ Setting options ]]
 -- Leaders and editor options must be set before plugin specifications are loaded.
-require("options")
+require 'options'
 
 -- [[ Basic Keymaps ]]
 -- These mappings use Neovim itself; mappings owned by plugins live beside those plugins.
-require("keymaps")
+require 'keymaps'
 
 -- [[ Project root ]]
 -- An explicit tab root wins; otherwise tools detect the current language workspace.
-require("aakash.project").setup()
+require('aakash.project').setup()
 
 -- [[ Configure and install plugins ]]
-require("aakash.lazy")
+require 'aakash.lazy'
 
 -- [[ Optional examples / next steps ]]
 -- The following comments only work if you have downloaded the repository, not

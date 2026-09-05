@@ -21,19 +21,12 @@ return {
     opts = {
       -- [[ Formatting ]]
       notify_on_error = true,
-      format_on_save = function(bufnr)
-        -- You can specify filetypes to autoformat on save here:
-        local enabled_filetypes = {
-          lua = true,
-        }
-        if enabled_filetypes[vim.bo[bufnr].filetype] then
-          return { timeout_ms = 1000 }
-        else
-          return nil
-        end
-      end,
+      -- Language modules add filetype keys, so save policies merge in any import order.
+      format_on_save_by_ft = {
+        lua = { timeout_ms = 1000 },
+      },
       default_format_opts = {
-        lsp_format = 'fallback', -- Use external formatters if configured below, otherwise use LSP formatting. Set to `false` to disable LSP formatting entirely.
+        lsp_format = 'fallback', -- Use external formatters if configured below, otherwise use LSP formatting. Set to 'never' to disable LSP formatting entirely.
       },
       -- You can also specify external formatters in here.
       formatters_by_ft = {
@@ -42,5 +35,15 @@ return {
         -- javascript = { "prettierd", "prettier", stop_after_first = true },
       },
     },
+    config = function(_, opts)
+      local format_on_save_by_ft = opts.format_on_save_by_ft
+      opts.format_on_save_by_ft = nil
+      opts.format_on_save = function(bufnr)
+        local rule = format_on_save_by_ft[vim.bo[bufnr].filetype]
+        if type(rule) == 'function' then return rule(bufnr) end
+        return rule
+      end
+      require('conform').setup(opts)
+    end,
   },
 }

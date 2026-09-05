@@ -82,16 +82,14 @@ return {
 
   {
     'stevearc/conform.nvim',
-    opts = function(_, opts)
-      opts.formatters_by_ft = opts.formatters_by_ft or {}
-      opts.formatters_by_ft.python = { 'ruff_organize_imports', 'ruff_format' }
-
-      local general_format_on_save = opts.format_on_save
-      opts.format_on_save = function(bufnr)
-        if vim.bo[bufnr].filetype == 'python' then return { timeout_ms = 1000 } end
-        if general_format_on_save then return general_format_on_save(bufnr) end
-      end
-    end,
+    opts = {
+      formatters_by_ft = {
+        python = { 'ruff_organize_imports', 'ruff_format' },
+      },
+      format_on_save_by_ft = {
+        python = { timeout_ms = 1000 },
+      },
+    },
   },
 
   {
@@ -99,9 +97,7 @@ return {
     opts = function(_, opts)
       opts.ensure_installed = opts.ensure_installed or {}
       for _, tool in ipairs { 'basedpyright', 'debugpy', 'ruff' } do
-        if not vim.tbl_contains(opts.ensure_installed, tool) then
-          table.insert(opts.ensure_installed, tool)
-        end
+        if not vim.tbl_contains(opts.ensure_installed, tool) then table.insert(opts.ensure_installed, tool) end
       end
     end,
   },

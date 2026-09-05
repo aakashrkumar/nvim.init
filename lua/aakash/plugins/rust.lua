@@ -1,5 +1,41 @@
+-- ============================================================
+-- RUST
+-- Rustaceanvim, Cargo manifest tooling, formatting, runnables via Overseer
+-- ============================================================
+
+-- Runnables, tests, and crate test suites become Overseer tasks: they land
+-- in the shared task list with cargo's errorformat instead of a throwaway
+-- split terminal. The errorformat mirrors Overseer's own cargo template.
+---@type rustaceanvim.Executor
+local overseer_executor = {
+  execute_command = function(command, args, cwd, opts)
+    local overseer = require 'overseer'
+    overseer
+      .new_task({
+        cmd = vim.list_extend({ command }, args),
+        cwd = cwd,
+        env = opts and opts.env,
+        components = {
+          {
+            'on_output_quickfix',
+            open_on_exit = 'failure',
+            errorformat = [[%Eerror: %\%%(aborting %\|could not compile%\)%\@!%m,]]
+              .. [[%Eerror[E%n]: %m,]]
+              .. [[%Inote: %m,]]
+              .. [[%Wwarning: %\%%(%.%# warning%\)%\@!%m,]]
+              .. [[%C %#--> %f:%l:%c,]]
+              .. [[%E  left:%m,%C right:%m %f:%l:%c,%Z,]]
+              .. [[%.%#panicked at \'%m\'\, %f:%l:%c]],
+          },
+          { 'open_output', direction = 'dock', on_start = 'always' },
+          'default',
+        },
+      })
+      :start()
+  end,
+}
+
 return {
-  -- Rustation Vim
   -- [[ Rust ]]
   {
     'mrcjkb/rustaceanvim',
@@ -12,6 +48,9 @@ return {
     init = function()
       vim.g.rustaceanvim = {
         tools = {
+          executor = overseer_executor,
+          test_executor = overseer_executor,
+          crate_test_executor = overseer_executor,
           code_actions = {
             ui_select_fallback = true,
           },
@@ -31,9 +70,7 @@ return {
               })
             end
 
-            if client:supports_method('textDocument/inlayHint', bufnr) then
-              vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
-            end
+            if client:supports_method('textDocument/inlayHint', bufnr) then vim.lsp.inlay_hint.enable(true, { bufnr = bufnr }) end
 
             if client:supports_method('textDocument/codeLens', bufnr) then
               map('<leader>tl', function()
@@ -107,7 +144,7 @@ return {
   -- Rustaceanvim's documentation warns that configuring rust-analyzer through
   -- both mechanisms can create conflicting clients.
 
-  -- Creates
+  -- Crates
   {
     'Saecki/crates.nvim',
     -- This is the plugin's documented lazy-loading pattern: the first read of a
@@ -129,21 +166,18 @@ return {
     },
   },
 
-  -- Repeated lazy.nvim specs are merged with the primary specs in their owning
-  -- feature modules. These functions extend shared options without replacing
-  -- general formatting or installation settings.
+  -- Filetype-keyed Conform options merge regardless of module order.
+  -- Shared installation/key lists below need append functions instead.
   {
     'stevearc/conform.nvim',
-    opts = function(_, opts)
-      opts.formatters_by_ft = opts.formatters_by_ft or {}
-      opts.formatters_by_ft.rust = { 'rustfmt' }
-
-      local general_format_on_save = opts.format_on_save
-      opts.format_on_save = function(bufnr)
-        if vim.bo[bufnr].filetype == 'rust' then return { timeout_ms = 1000 } end
-        if general_format_on_save then return general_format_on_save(bufnr) end
-      end
-    end,
+    opts = {
+      formatters_by_ft = {
+        rust = { 'rustfmt' },
+      },
+      format_on_save_by_ft = {
+        rust = { timeout_ms = 1000 },
+      },
+    },
   },
 
   {

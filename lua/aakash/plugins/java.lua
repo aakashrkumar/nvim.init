@@ -3,19 +3,30 @@
 -- Language server, refactors, formatting, debugging, and tests
 -- ============================================================
 
-local mason_root = vim.fn.stdpath 'data' .. '/mason'
-
 local function java_bundles()
   local bundles = {}
-  local debug_jar = mason_root .. '/share/java-debug-adapter/com.microsoft.java.debug.plugin.jar'
-  if vim.uv.fs_stat(debug_jar) then bundles[#bundles + 1] = debug_jar end
+  -- Resolve Mason's public root after setup, not while importing this spec.
+  local mason_root = vim.env.MASON
+  if not mason_root then return bundles end
 
+  local seen = {}
+  local function add_bundle(jar)
+    -- Mason may expose versioned and stable names for the same physical JAR.
+    local realpath = vim.uv.fs_realpath(jar)
+    if realpath and not seen[realpath] then
+      seen[realpath] = true
+      bundles[#bundles + 1] = realpath
+    end
+  end
+  add_bundle(mason_root .. '/share/java-debug-adapter/com.microsoft.java.debug.plugin.jar')
+
+  -- Keep the test JAR exclusions documented by nvim-jdtls.
   local excluded_test_jars = {
     ['com.microsoft.java.test.runner-jar-with-dependencies.jar'] = true,
     ['jacocoagent.jar'] = true,
   }
   for _, jar in ipairs(vim.fn.glob(mason_root .. '/share/java-test/*.jar', false, true)) do
-    if not excluded_test_jars[vim.fs.basename(jar)] then bundles[#bundles + 1] = jar end
+    if not excluded_test_jars[vim.fs.basename(jar)] then add_bundle(jar) end
   end
   return bundles
 end
@@ -35,8 +46,11 @@ local function start_jdtls(dispatchers, config)
     jdtls_workspace(root_dir),
   }
 
-  local lombok_jar = mason_root .. '/packages/jdtls/lombok.jar'
-  if vim.uv.fs_stat(lombok_jar) then table.insert(cmd, 2, '--jvm-arg=-javaagent:' .. lombok_jar) end
+  local mason_root = vim.env.MASON
+  if mason_root then
+    local lombok_jar = mason_root .. '/share/jdtls/lombok.jar'
+    if vim.uv.fs_stat(lombok_jar) then table.insert(cmd, 2, '--jvm-arg=-javaagent:' .. lombok_jar) end
+  end
 
   return vim.lsp.rpc.start(cmd, dispatchers, {
     cwd = config.cmd_cwd,
@@ -45,6 +59,8 @@ local function start_jdtls(dispatchers, config)
   })
 end
 
+-- nvim-lspconfig and nvim-jdtls both ship lsp/jdtls.lua with different defaults.
+-- Pin the command and root markers instead of depending on runtimepath order.
 ---@type vim.lsp.Config
 local server = {
   cmd = start_jdtls,
@@ -105,14 +121,12 @@ return {
 
   {
     'stevearc/conform.nvim',
-    opts = function(_, opts)
+    opts = {
       -- No external formatter: Conform falls back to JDTLS for Java.
-      local general_format_on_save = opts.format_on_save
-      opts.format_on_save = function(bufnr)
-        if vim.bo[bufnr].filetype == 'java' then return { timeout_ms = 3000 } end
-        if general_format_on_save then return general_format_on_save(bufnr) end
-      end
-    end,
+      format_on_save_by_ft = {
+        java = { timeout_ms = 3000 },
+      },
+    },
   },
 
   {
@@ -120,9 +134,7 @@ return {
     opts = function(_, opts)
       opts.ensure_installed = opts.ensure_installed or {}
       for _, tool in ipairs { 'jdtls', 'java-debug-adapter', 'java-test' } do
-        if not vim.tbl_contains(opts.ensure_installed, tool) then
-          table.insert(opts.ensure_installed, tool)
-        end
+        if not vim.tbl_contains(opts.ensure_installed, tool) then table.insert(opts.ensure_installed, tool) end
       end
     end,
   },

@@ -19,18 +19,56 @@ local check_version = function()
   end
 end
 
-local check_external_reqs = function()
-  -- Basic utils: `git`, `make`, `unzip`
-  for _, exe in ipairs { 'git', 'make', 'unzip', 'rg' } do
-    local is_executable = vim.fn.executable(exe) == 1
-    if is_executable then
-      vim.health.ok(string.format("Found executable: '%s'", exe))
+-- Each row names acceptable executables and the feature that needs them.
+local function check_tools(title, tools)
+  vim.health.start(title)
+  for _, tool in ipairs(tools) do
+    local found
+    for _, executable in ipairs(tool[1]) do
+      if vim.fn.executable(executable) == 1 then
+        found = executable
+        break
+      end
+    end
+    if found then
+      vim.health.ok(('%s: %s'):format(found, tool[2]))
     else
-      vim.health.warn(string.format("Could not find executable: '%s'", exe))
+      vim.health.warn(('Missing %s: %s'):format(table.concat(tool[1], ' or '), tool[2]))
     end
   end
+end
 
-  return true
+local function check_external_reqs()
+  check_tools('Editor and parser tools', {
+    { { 'git' }, 'plugin installation and Git integration' },
+    { { 'make' }, 'native plugin builds' },
+    { { 'unzip' }, 'Mason package extraction' },
+    { { 'rg' }, 'project text search' },
+    { { 'fd', 'fdfind' }, 'file search and Python environment discovery' },
+    { { 'tree-sitter' }, 'parser builds; version 0.26.1 or newer is required' },
+    { { 'cc', 'gcc', 'clang' }, 'parser compilation' },
+    { { 'curl' }, 'parser downloads' },
+    { { 'tar' }, 'parser archive extraction' },
+  })
+  vim.health.info 'For parser version and query checks, run :checkhealth nvim-treesitter.'
+
+  check_tools('Language tools (only needed for languages you use)', {
+    { { 'cargo' }, 'Rust builds and runnables' },
+    { { 'rust-analyzer' }, 'Rust language support through rustaceanvim' },
+    { { 'rustfmt' }, 'Rust formatting' },
+    { { 'python3' }, 'Python environments and the JDTLS launcher' },
+    { { 'java' }, 'Java language support; JDTLS requires a JDK 21 or newer' },
+    { { 'cmake' }, 'C/C++ project configuration and builds' },
+  })
+  vim.health.info 'For language tooling checks, run :checkhealth rustaceanvim or :checkhealth vim.lsp.'
+  vim.health.info 'ESP-IDF tools are resolved inside each task’s activated environment; they need not be on Neovim’s PATH.'
+
+  check_tools('Optional document rendering tools', {
+    { { 'magick' }, 'Snacks image conversion' },
+    { { 'tectonic', 'pdflatex' }, 'rendered LaTeX math' },
+    { { 'mmdc' }, 'rendered Mermaid diagrams' },
+  })
+  vim.health.info 'These rendering tools are only needed for the corresponding content. Run :checkhealth snacks for terminal/image support.'
 end
 
 return {
