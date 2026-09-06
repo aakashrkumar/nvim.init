@@ -69,6 +69,19 @@ local function check_external_reqs()
     { { 'mmdc' }, 'rendered Mermaid diagrams' },
   })
   vim.health.info 'These rendering tools are only needed for the corresponding content. Run :checkhealth snacks for terminal/image support.'
+
+  local profiling_tools = {
+    { { 'samply' }, 'optional local CPU captures and browser profiles' },
+  }
+  local linux = vim.uv.os_uname().sysname == 'Linux'
+  if linux then table.insert(profiling_tools, { { 'perf' }, 'optional Linux captures and PerfAnno annotations' }) end
+  check_tools('Optional profiling tools', profiling_tools)
+  vim.health.info 'Profiling tools are only needed when capturing or opening profiles; no system settings are changed automatically.'
+  vim.health.info('Captures are retained in ' .. vim.fs.joinpath(vim.fn.stdpath 'cache', 'profiling') .. '; perf/DWARF recordings can grow quickly.')
+  if linux then
+    vim.health.info 'For truncated perf callgraphs from LLD-built Rust code, an opt-in workaround is -C link-arg=-Wl,--no-rosegment. Other linkers may reject it.'
+    vim.health.info 'Task RUSTFLAGS overrides configured rustflags and can trigger rebuilds. Preserve existing flags when adding a linker workaround.'
+  end
 end
 
 return {
