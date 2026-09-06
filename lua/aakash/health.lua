@@ -74,10 +74,28 @@ local function check_external_reqs()
     { { 'samply' }, 'optional local CPU captures and browser profiles' },
   }
   local linux = vim.uv.os_uname().sysname == 'Linux'
+  local macos = vim.uv.os_uname().sysname == 'Darwin'
   if linux then table.insert(profiling_tools, { { 'perf' }, 'optional Linux captures and PerfAnno annotations' }) end
+  if macos then table.insert(profiling_tools, { { 'cargo-instruments' }, 'optional macOS Rust captures in Apple Instruments' }) end
   check_tools('Optional profiling tools', profiling_tools)
   vim.health.info 'Profiling tools are only needed when capturing or opening profiles; no system settings are changed automatically.'
-  vim.health.info('Captures are retained in ' .. vim.fs.joinpath(vim.fn.stdpath 'cache', 'profiling') .. '; perf/DWARF recordings can grow quickly.')
+  vim.health.info(
+    'Captures are retained in ' .. vim.fs.joinpath(vim.fn.stdpath 'cache', 'profiling') .. '; Instruments and perf/DWARF recordings can grow quickly.'
+  )
+  if macos then
+    if vim.fn.executable 'xcrun' == 1 then
+      local result = vim.system({ 'xcrun', '--find', 'xctrace' }, { text = true }):wait(5000)
+      if result.code == 0 then
+        vim.health.ok('Apple trace recorder: ' .. vim.trim(result.stdout))
+      else
+        vim.health.warn 'xctrace is unavailable; Instruments needs full Xcode selected, not just the Command Line Tools.'
+      end
+    else
+      vim.health.warn 'Missing xcrun; Instruments requires full Xcode.'
+    end
+    vim.health.info 'Install cargo-instruments with cargo install cargo-instruments; inspect Xcode selection with xcode-select --print-path.'
+    vim.health.info 'cargo-instruments prepares debug symbols and ad-hoc signs Apple Silicon build outputs using its native defaults.'
+  end
   if linux then
     vim.health.info 'For truncated perf callgraphs from LLD-built Rust code, an opt-in workaround is -C link-arg=-Wl,--no-rosegment. Other linkers may reject it.'
     vim.health.info 'Task RUSTFLAGS overrides configured rustflags and can trigger rebuilds. Preserve existing flags when adding a linker workaround.'

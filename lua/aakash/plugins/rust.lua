@@ -74,6 +74,8 @@ end
 local function cargo_profile_template(package, target, kind, root)
   local name = ('Profile Rust: %s (%s %s)'):format(package.name, kind, target.name)
   local cwd = vim.fs.dirname(package.manifest_path)
+  -- cargo-instruments supports these Cargo target kinds, but not --test.
+  local instruments_available = vim.uv.os_uname().sysname == 'Darwin' and kind ~= 'test'
   return {
     name = name,
     desc = 'Profile a host executable using Cargo’s normal build target, profile, and cache.',
@@ -100,16 +102,36 @@ local function cargo_profile_template(package, target, kind, root)
       }
       params.all_features = { type = 'boolean', name = 'All features', default = false, desc = 'Enable all Cargo features', order = 7 }
       params.no_default_features = { type = 'boolean', name = 'No default features', default = false, desc = 'Disable default Cargo features', order = 8 }
+      if instruments_available then
+        table.insert(params.backend.choices, 'instruments')
+        params.instruments_template = {
+          type = 'string',
+          name = 'Instruments template',
+          default = 'Time Profiler',
+          order = 9,
+          desc = 'Instruments only; use cargo instruments --list-templates for built-in and custom names',
+        }
+        params.instruments_time_limit = {
+          type = 'integer',
+          name = 'Instruments limit (ms; 0 = default)',
+          default = 0,
+          order = 10,
+          desc = 'Instruments only; 0 uses its default; a positive limit terminates the target after this many milliseconds',
+          validate = function(value) return value >= 0, 'The recording limit must be non-negative' end,
+        }
+      end
       return params
     end,
     builder = function(params)
       local performance = require 'aakash.performance'
       local env = performance.environment(params.env)
-      local host = cargo_profile_host(cwd, env)
+      local instruments = params.backend == 'instruments'
+      if instruments and not instruments_available then error('Cargo Instruments requires macOS and a binary, example, or benchmark target', 0) end
+      local host = not instruments and cargo_profile_host(cwd, env) or nil
       -- Cargo also interprets globs without a shell. Never let one selection
       -- expand to multiple test/benchmark executables sharing an output file.
       if target.name:find '[*?%[%]]' then error('Cannot profile a Cargo target whose name contains glob characters: ' .. target.name) end
-      local command = (kind == 'bin' or kind == 'example') and 'run' or kind
+      local command = instruments and 'instruments' or (kind == 'bin' or kind == 'example') and 'run' or kind
       local cmd = {
         'cargo',
         command,
@@ -121,20 +143,39 @@ local function cargo_profile_template(package, target, kind, root)
         target.name,
         '--profile=' .. (params.profile or 'profiling'),
       }
-      for _, feature in ipairs(params.features or {}) do
-        cmd[#cmd + 1] = '--features=' .. feature
+      if instruments then
+        vim.list_extend(cmd, { '--template', params.instruments_template })
+        if params.instruments_time_limit > 0 then vim.list_extend(cmd, { '--time-limit', tostring(params.instruments_time_limit) }) end
+        -- cargo-instruments accepts one --features value, unlike cargo run.
+        if #(params.features or {}) > 0 then vim.list_extend(cmd, { '--features', table.concat(params.features, ',') }) end
+      else
+        for _, feature in ipairs(params.features or {}) do
+          cmd[#cmd + 1] = '--features=' .. feature
+        end
       end
       if params.all_features then cmd[#cmd + 1] = '--all-features' end
       if params.no_default_features then cmd[#cmd + 1] = '--no-default-features' end
       cmd[#cmd + 1] = '--'
       vim.list_extend(cmd, performance.arguments(params.args))
-      return performance.capture({
-        name = name,
-        cmd = cmd,
-        cwd = cwd,
-        env = env,
-        metadata = { profile = { root = root } },
-      }, params.backend, function(prefix, argv) return cargo_profile_runner(prefix, argv, host) end)
+      return performance.capture(
+        {
+          name = name,
+          cmd = cmd,
+          cwd = cwd,
+          env = env,
+          metadata = { profile = { root = root } },
+        },
+        params.backend,
+        function(prefix, argv)
+          if instruments then
+            for i = 3, #argv do
+              prefix[#prefix + 1] = argv[i]
+            end
+            return prefix
+          end
+          return cargo_profile_runner(prefix, argv, host)
+        end
+      )
     end,
   }
 end

@@ -8,6 +8,26 @@ local function normalize(path) return vim.fs.normalize(vim.uv.fs_realpath(path) 
 
 local function directory(root) return vim.fs.joinpath(vim.fn.stdpath 'cache', 'profiling', vim.fn.sha256(normalize(root)):sub(1, 16)) end
 
+function M.artifact_path(root, backend)
+  local suffix = backend == 'samply' and '.json.gz' or backend == 'instruments' and '.trace' or '.data'
+  return vim.fs.joinpath(directory(root), ('%s-%d-%.0f%s'):format(backend, vim.fn.getpid(), vim.uv.hrtime(), suffix))
+end
+
+-- Instruments writes a document bundle, not a single perf/Samply data file.
+-- Require its template and a recorded run; an empty .trace directory is not a capture.
+-- cargo-instruments can exit zero after xctrace errors; exit status alone is not enough.
+function M.artifact_stat(file, backend)
+  local stat = vim.uv.fs_stat(file)
+  if not stat then return end
+  if backend ~= 'instruments' then return stat.type == 'file' and stat.size > 0 and stat or nil end
+  if stat.type ~= 'directory' then return end
+  local template = vim.uv.fs_stat(vim.fs.joinpath(file, 'form.template'))
+  if not template or template.type ~= 'file' or template.size == 0 then return end
+  for name, kind in vim.fs.dir(file) do
+    if kind == 'directory' and name:match '^Trace%d+%.run$' then return stat end
+  end
+end
+
 -- JSON keeps spaces, quotes, commas, and empty arguments literal. Overseer's
 -- native list field splits on commas and is unsuitable for arbitrary argv.
 function M.arguments(text)
@@ -78,15 +98,24 @@ end
 ---@return overseer.TaskDefinition
 function M.capture(task, backend, wrap)
   backend = backend or 'samply'
-  if backend ~= 'samply' and backend ~= 'perf' then error('Unknown profiler: ' .. backend, 0) end
-  if backend == 'perf' and vim.uv.os_uname().sysname ~= 'Linux' then error('perf/PerfAnno capture requires Linux', 0) end
-  if vim.fn.executable(backend) ~= 1 then error(('Profiling requires %s on PATH; see :checkhealth aakash'):format(backend), 0) end
+  if backend ~= 'samply' and backend ~= 'perf' and backend ~= 'instruments' then error('Unknown profiler: ' .. backend, 0) end
+  local system = vim.uv.os_uname().sysname
+  if backend == 'perf' and system ~= 'Linux' then error('perf/PerfAnno capture requires Linux', 0) end
+  if backend == 'instruments' and system ~= 'Darwin' then error('Cargo Instruments capture requires macOS', 0) end
+  local executable = backend == 'instruments' and 'cargo-instruments' or backend
+  if vim.fn.executable(executable) ~= 1 then error(('Profiling requires %s on PATH; see :checkhealth aakash'):format(executable), 0) end
   task.metadata = task.metadata or {}
   local root = normalize(task.metadata.profile and task.metadata.profile.root or task.cwd or project.get())
-  local suffix = backend == 'samply' and '.json.gz' or '.data'
-  local file = vim.fs.joinpath(directory(root), ('%s-%d-%.0f%s'):format(backend, vim.fn.getpid(), vim.uv.hrtime(), suffix))
-  local prefix = backend == 'samply' and { 'samply', 'record', '--save-only', '-o', file, '--' }
-    or { 'perf', 'record', '-e', 'cycles:u', '--call-graph', 'dwarf', '-o', file, '--' }
+  local file = M.artifact_path(root, backend)
+  local prefix
+  if backend == 'instruments' then
+    -- Cargo owns building and symbols; the component opens only validated traces.
+    prefix = { 'cargo', 'instruments', '--no-open', '--output', file }
+  elseif backend == 'samply' then
+    prefix = { 'samply', 'record', '--save-only', '-o', file, '--' }
+  else
+    prefix = { 'perf', 'record', '-e', 'cycles:u', '--call-graph', 'dwarf', '-o', file, '--' }
+  end
   task.cmd = wrap and wrap(prefix, task.cmd) or vim.list_extend(prefix, task.cmd)
   task.name = (task.name or 'Profile') .. ' [' .. backend .. ']'
   task.cwd = task.cwd or root
@@ -102,7 +131,6 @@ function M.capture(task, backend, wrap)
     -- The default five-minute disposal would kill a linked viewer and remove
     -- the task needed by ProfileRepeat. Other tasks keep their normal policy.
     { 'on_complete_dispose', statuses = {} },
-    { 'open_output', direction = 'dock', focus = false, on_start = 'always' },
   })
   if backend == 'samply' then table.insert(task.components, { 'run_after', tasks = { viewer(file, root) } }) end
   -- aakash.profile validates the artifact before setting status. Include the
@@ -111,19 +139,21 @@ function M.capture(task, backend, wrap)
   return task
 end
 
--- Artifacts are native files, not a parallel history database. A newly created
--- task gets its own file; restarting that task replaces only its own capture.
+-- Artifacts stay in native format, not a parallel history database.
+-- Samply/perf repeat in place; Instruments repeats get fresh document bundles.
 local function latest(backend)
   local root = normalize(project.get())
   local dir = directory(root)
   if not vim.uv.fs_stat(dir) then return nil end
   local result, timestamp
-  for name, kind in vim.fs.dir(dir) do
-    local tool = name:match '^samply%-.+%.json%.gz$' and 'samply' or name:match '^perf%-.+%.data$' and 'perf'
-    if kind == 'file' and tool and (not backend or backend == tool) then
+  for name in vim.fs.dir(dir) do
+    local tool = name:match '^samply%-.+%.json%.gz$' and 'samply'
+      or name:match '^perf%-.+%.data$' and 'perf'
+      or name:match '^instruments%-.+%.trace$' and 'instruments'
+    if tool and (not backend or backend == tool) then
       local file = vim.fs.joinpath(dir, name)
-      local stat = vim.uv.fs_stat(file)
-      if stat and stat.size > 0 then
+      local stat = M.artifact_stat(file, tool)
+      if stat then
         local time = stat.mtime.sec + stat.mtime.nsec / 1e9
         if not timestamp or time > timestamp then
           result, timestamp = { file = file, backend = tool, root = root }, time
@@ -170,6 +200,10 @@ function M.open()
     vim.notify('No saved profile for this project', vim.log.levels.WARN)
   elseif result.backend == 'perf' then
     M.load_perf('flat', result.file)
+  elseif result.backend == 'instruments' then
+    if vim.uv.os_uname().sysname ~= 'Darwin' then return vim.notify('Opening Instruments traces requires macOS', vim.log.levels.WARN) end
+    local _, err = vim.ui.open(result.file)
+    if err then vim.notify(err, vim.log.levels.ERROR) end
   else
     local overseer = require 'overseer'
     -- run_after owns an ephemeral viewer; unique does not search those tasks.
@@ -186,7 +220,7 @@ function M.open()
   end
 end
 
-function M.repeat_last()
+local function last_capture()
   local root = normalize(project.get())
   local tasks = require('overseer').list_tasks {
     filter = function(task) return task.time_start ~= nil and task.metadata.profile ~= nil and task.metadata.profile.root == root end,
@@ -195,11 +229,35 @@ function M.repeat_last()
       return a.time_start > b.time_start
     end,
   }
-  if tasks[1] then
-    require('overseer').run_action(tasks[1], 'restart')
+  return tasks[1]
+end
+
+function M.repeat_last()
+  local task = last_capture()
+  if task then
+    require('overseer').run_action(task, 'restart')
   else
     vim.notify('No profiling task to repeat; run :Profile first', vim.log.levels.WARN)
   end
+end
+
+function M.toggle_output()
+  -- Close before resolving the project: an output buffer has no source path.
+  local win = vim.api.nvim_get_current_win()
+  if vim.w[win].aakash_profile_output and vim.api.nvim_win_get_config(win).relative ~= '' then
+    vim.api.nvim_win_close(win, true)
+    return
+  end
+  local task = last_capture()
+  if not task or not task:get_bufnr() then
+    vim.notify('No profiling output for this project; run :Profile first', vim.log.levels.WARN)
+    return
+  end
+  -- Overseer owns the terminal buffer and dismisses its float on WinLeave.
+  task:open_output 'float'
+  vim.w.aakash_profile_output = true
+  -- A space-prefixed terminal mapping must not delay typing in other shells.
+  vim.keymap.set('t', '<leader>Pf', M.toggle_output, { buffer = 0, desc = 'Toggle profiling output' })
 end
 
 function M.run()

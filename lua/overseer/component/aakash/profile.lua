@@ -1,11 +1,25 @@
 -- Save source before recording and require a real capture before success.
--- Also prevent overlapping captures and load native PerfAnno on Linux.
--- Overseer's built-in components handle retention, uniqueness, and viewers.
+-- Also prevent overlapping captures and open PerfAnno or Instruments on success.
+-- Overseer's built-in components handle retention, uniqueness, and Samply viewers.
 return {
-  desc = 'Prepare and validate a local profiling capture, then load PerfAnno',
+  desc = 'Prepare and validate a local profiling capture, then open its viewer',
   editable = false,
   constructor = function()
     return {
+      on_reset = function(_, task)
+        local profile = task.metadata.profile
+        if profile.backend ~= 'instruments' then return end
+        -- Instruments caches open documents. A fresh bundle keeps both the
+        -- previous document and the new recording usable without UI automation.
+        for i, arg in ipairs(task.cmd) do
+          if arg == '--output' and task.cmd[i + 1] == profile.file then
+            profile.file = require('aakash.performance').artifact_path(profile.root, profile.backend)
+            task.cmd[i + 1] = profile.file
+            return
+          end
+        end
+        error 'Cannot locate this task’s Instruments output argument'
+      end,
       on_pre_start = function(self, task)
         local profile = task.metadata.profile
         profile.ready = false
@@ -48,11 +62,16 @@ return {
 
         local ok, err = pcall(function()
           vim.fn.mkdir(vim.fs.dirname(profile.file), 'p')
-          -- Repeat replaces this task's own artifact. Removing it first means
-          -- a failed build cannot be mistaken for a new successful capture.
-          if vim.uv.fs_lstat(profile.file) then
-            local removed, reason = os.remove(profile.file)
-            if not removed then error(reason, 0) end
+          -- Samply/perf repeat in place; Instruments resets to a fresh path.
+          -- A failed recording must never reuse an older successful capture.
+          local stat = vim.uv.fs_lstat(profile.file)
+          if stat then
+            if profile.backend == 'instruments' then
+              error 'Instruments trace already exists; restart this task to record a new trace'
+            else
+              local removed, reason = os.remove(profile.file)
+              if not removed then error(reason, 0) end
+            end
           end
         end)
         if not ok then
@@ -61,12 +80,13 @@ return {
         end
         profile.ready = true
       end,
+      on_start = function(_, task) vim.notify('Started ' .. task.name .. '\n:ProfileOutput toggles its output', vim.log.levels.INFO, { title = 'Profiling' }) end,
       on_exit = function(_, task, code)
         local status = code == 0 and 'SUCCESS' or 'FAILURE'
         if status == 'SUCCESS' then
-          local stat = vim.uv.fs_stat(task.metadata.profile.file)
-          if not stat or stat.type ~= 'file' or stat.size == 0 then
-            local message = 'No capture was written; check whether a build target or runner override bypassed the profiler.'
+          local profile = task.metadata.profile
+          if not require('aakash.performance').artifact_stat(profile.file, profile.backend) then
+            local message = 'No valid capture was written; see :ProfileOutput for build or recording errors.'
             task:set_result { error = message }
             vim.notify(message, vim.log.levels.ERROR)
             status = 'FAILURE'
@@ -75,8 +95,18 @@ return {
         task:finalize(status)
       end,
       on_complete = function(_, task, status)
+        if status ~= 'SUCCESS' then return end
         local profile = task.metadata.profile
-        if status == 'SUCCESS' and profile.backend == 'perf' then vim.schedule(function() require('aakash.performance').load_perf('flat', profile.file) end) end
+        local file = profile.file
+        if profile.backend == 'perf' then
+          vim.schedule(function() require('aakash.performance').load_perf('flat', file) end)
+        elseif profile.backend == 'instruments' then
+          -- A timed recording can be usable even when Cargo skips its open step.
+          vim.schedule(function()
+            local _, err = vim.ui.open(file)
+            if err then vim.notify(err, vim.log.levels.ERROR) end
+          end)
+        end
       end,
     }
   end,

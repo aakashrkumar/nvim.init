@@ -1,6 +1,6 @@
 -- ============================================================
 -- PROFILING
--- Local captures and viewers use the existing Overseer task UI
+-- Overseer captures, native viewers, and a shared profiling menu
 -- ============================================================
 
 local linux = vim.uv.os_uname().sysname == 'Linux'
@@ -21,16 +21,27 @@ return {
         { desc = 'Repeat this project’s last profile' }
       )
       vim.api.nvim_create_user_command('ProfileOpen', function() require('aakash.performance').open() end, { desc = 'Open this project’s last profile' })
+      vim.api.nvim_create_user_command(
+        'ProfileOutput',
+        function() require('aakash.performance').toggle_output() end,
+        { desc = 'Toggle this project’s profiling output' }
+      )
     end,
     -- :Profile reviews every setting in Snacks before Run. Arguments and environment
     -- variables have entry editors; Cancel leaves no task. Overseer owns execution.
+    -- Captures notify without opening a split. Pf toggles their native output
+    -- float; hiding it leaves the task running.
     -- Rust launches expect a manifest profiling profile with release optimization
-    -- and debug symbols. Use terminal Ctrl-C to let a profiler finish writing;
-    -- Overseer Stop cancels the task. Keep the viewer task alive for its browser.
+    -- and debug symbols. In the output float, i then Ctrl-C lets the profiler
+    -- finish writing. Overseer Stop cancels; Samply's viewer task serves its browser.
+    -- macOS Rust bins/examples/benches also offer cargo-instruments. Choose its
+    -- template and optional recording limit; completed traces open in Instruments.
+    -- Repeats get fresh .trace bundles, so already-open documents keep their data.
     keys = {
       { '<leader>Pp', '<cmd>Profile<cr>', desc = '[P]rofile program' },
       { '<leader>Pr', '<cmd>ProfileRepeat<cr>', desc = '[R]epeat profile' },
       { '<leader>Po', '<cmd>ProfileOpen<cr>', desc = '[O]pen profile' },
+      { '<leader>Pf', '<cmd>ProfileOutput<cr>', desc = '[F]loating profile output' },
     },
   },
 
