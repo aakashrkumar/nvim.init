@@ -136,6 +136,8 @@ return {
       ---@diagnostic disable-next-line: duplicate-set-field
       statusline.section_location = function() return '%2l:%-2v' end
 
+      -- MiniFiles natively notifies LSP servers before/after file operations.
+      -- Keep that path enabled; adding a rename autocmd would notify them twice.
       require('mini.files').setup {
         windows = { preview = true, width_preview = 40 },
         options = { permanent_delete = false },

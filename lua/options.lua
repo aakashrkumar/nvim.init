@@ -46,6 +46,10 @@ vim.o.breakindent = true
 -- Enable undo/redo changes even after closing and reopening a file
 vim.o.undofile = true
 
+-- Sessions restore editing state, not terminal commands or stale plugin options.
+-- `terminal` would restart old task/debug/profiling commands; leave it out.
+vim.opt.sessionoptions = { 'buffers', 'curdir', 'tabpages', 'winsize', 'help', 'globals', 'skiprtp', 'folds' }
+
 -- Case-insensitive searching UNLESS \C or one or more capital letters in the search term
 vim.o.ignorecase = true
 vim.o.smartcase = true

@@ -24,6 +24,33 @@ return {
     'Bekaboo/dropbar.nvim',
     lazy = false,
     config = function()
+      local default_enable = require('dropbar.configs').opts.bar.enable
+      require('dropbar').setup {
+        bar = {
+          enable = function(buf, win, info)
+            if vim.api.nvim_buf_is_valid(buf) then
+              local filetype = vim.bo[buf].filetype
+              if filetype == 'dap-repl' or filetype:match '^dap%-view' then return false end
+            end
+            -- Keep Dropbar's own policy for source buffers and ordinary terminals.
+            return default_enable(buf, win, info)
+          end,
+        },
+      }
+
+      -- A split may inherit Dropbar before its terminal/debug filetype is set.
+      -- Remove only our inherited winbar; never clear dap-view's own section bar.
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+        group = vim.api.nvim_create_augroup('dropbar-debug-windows', { clear = true }),
+        callback = function(event)
+          local filetype = vim.bo[event.buf].filetype
+          if filetype ~= 'dap-repl' and not filetype:match '^dap%-view' then return end
+          for _, win in ipairs(vim.fn.win_findbuf(event.buf)) do
+            if vim.wo[win][0].winbar:find('dropbar', 1, true) then vim.wo[win][0].winbar = '' end
+          end
+        end,
+      })
+
       vim.keymap.set('n', '<leader>;', require('dropbar.api').pick, { desc = 'Pick dropbar context' })
       vim.keymap.set('n', '[;', require('dropbar.api').goto_context_start, { desc = 'Go to context start' })
       vim.keymap.set('n', '];', require('dropbar.api').select_next_context, { desc = 'Select next context' })

@@ -36,21 +36,92 @@ return {
   },
 
   {
-    'rcarriga/nvim-dap-ui',
-    dependencies = {
-      { 'mfussenegger/nvim-dap' },
-      { 'nvim-neotest/nvim-nio' },
-      {
-        'theHamsta/nvim-dap-virtual-text',
-        main = 'nvim-dap-virtual-text',
-        opts = {},
-      },
-    },
+    'igorlfs/nvim-dap-view',
+    version = '1.*',
+    lazy = false,
+    dependencies = { 'mfussenegger/nvim-dap' },
     config = function()
       local dap = require 'dap'
-      local dapui = require 'dapui'
+      local dapview = require 'dap-view'
 
-      dapui.setup {}
+      dapview.setup {
+        winbar = {
+          sections = { 'scopes', 'watches', 'threads', 'breakpoints', 'exceptions', 'repl' },
+          default_section = 'scopes',
+          show_keymap_hints = false,
+          -- Keep readable key hints and controls visible beside the console.
+          base_sections = {
+            scopes = { label = 'Vars:S', keymap = 'S' },
+            watches = { label = 'Watch:W', keymap = 'W' },
+            threads = { label = 'Stack:T', keymap = 'T' },
+            breakpoints = { label = 'BP:B', keymap = 'B' },
+            exceptions = { label = 'EX:E', keymap = 'E' },
+            repl = { label = 'REPL:R', keymap = 'R' },
+          },
+          controls = {
+            enabled = true,
+            buttons = { 'play', 'step_over', 'step_into', 'step_out', 'terminate', 'disconnect' },
+          },
+        },
+        windows = {
+          size = 0.33,
+          position = 'below',
+          terminal = { size = 0.35, position = 'right' },
+        },
+        hover = { border = 'rounded' },
+        help = { border = 'rounded' },
+        virtual_text = { enabled = true, position = 'eol' },
+        auto_toggle = 'keep_terminal',
+        follow_tab = true,
+      }
+
+      -- Reuse visible source buffers, otherwise open a safe tab rather than
+      -- replacing a debugger pane. The dock follows native DAP source jumps.
+      dap.defaults.fallback.switchbuf = 'usevisible,usetab,newtab'
+
+      -- Internal buffer URIs are not useful status labels for the debug dock.
+      vim.api.nvim_create_autocmd('FileType', {
+        pattern = { 'dap-view', 'dap-view-term', 'dap-repl' },
+        group = vim.api.nvim_create_augroup('aakash-dap-statusline', { clear = true }),
+        callback = function(event)
+          local titles = { ['dap-view'] = 'Debug inspector', ['dap-view-term'] = 'Program output', ['dap-repl'] = 'Debug REPL' }
+          local text = '%#MiniStatuslineDevinfo# ' .. titles[vim.bo[event.buf].filetype] .. ' %='
+          local function content() return text end
+          vim.b[event.buf].ministatusline_config = { content = { active = content, inactive = content } }
+        end,
+      })
+
+      local function set_debug_highlights()
+        for name, link in pairs {
+          DapBreakpoint = 'DiagnosticError',
+          DapBreakpointCondition = 'DiagnosticWarn',
+          DapLogPoint = 'DiagnosticInfo',
+          DapBreakpointRejected = 'Comment',
+          DapStopped = 'DiagnosticWarn',
+          DapStoppedLine = 'DiagnosticVirtualTextWarn',
+        } do
+          vim.api.nvim_set_hl(0, name, { link = link })
+        end
+      end
+      set_debug_highlights()
+      vim.api.nvim_create_autocmd('ColorScheme', {
+        group = vim.api.nvim_create_augroup('aakash-dap-highlights', { clear = true }),
+        callback = set_debug_highlights,
+      })
+      for name, text in pairs {
+        DapBreakpoint = '●',
+        DapBreakpointCondition = '◆',
+        DapLogPoint = '◉',
+        DapBreakpointRejected = '○',
+        DapStopped = '▶',
+      } do
+        vim.fn.sign_define(name, {
+          text = text,
+          texthl = name,
+          numhl = name,
+          linehl = name == 'DapStopped' and 'DapStoppedLine' or '',
+        })
+      end
 
       local debug_step_keymaps = {
         { '<Down>', dap.step_over, '[D]ebug: step [O]ver' },
@@ -62,10 +133,11 @@ return {
       -- Follow DAP's session lifecycle, including disconnects and adapter failures.
       -- Keep the mappings while another session is still alive, and restore the
       -- original global mappings after the last one closes. Buffer maps stay local.
-      -- DAP UI still has one shared console for integrated-terminal sessions.
       local saved_step_keymaps
-      dap.listeners.on_session.aakash_dap_ui = function(_, session)
-        if session then
+      dap.listeners.on_session.aakash_dap_step_keys = vim.schedule_wrap(function()
+        -- Read the current session after scheduling: a queued close must not
+        -- restore the arrows if another session has already taken its place.
+        if dap.session() then
           if saved_step_keymaps then return end
           saved_step_keymaps = {}
           for _, mapping in ipairs(vim.api.nvim_get_keymap 'n') do
@@ -76,7 +148,6 @@ return {
           for _, keymap in ipairs(debug_step_keymaps) do
             vim.keymap.set('n', keymap[1], keymap[2], { silent = true, desc = keymap[3] })
           end
-          dapui.open()
         elseif saved_step_keymaps then
           for _, keymap in ipairs(debug_step_keymaps) do
             pcall(vim.keymap.del, 'n', keymap[1])
@@ -84,28 +155,77 @@ return {
             if previous then vim.fn.mapset('n', false, previous) end
           end
           saved_step_keymaps = nil
-          dapui.close()
         end
+      end)
+
+      local function prompt_breakpoint(prompt, apply)
+        local bufnr = vim.api.nvim_get_current_buf()
+        local line = vim.api.nvim_win_get_cursor(0)[1]
+        vim.ui.input({ prompt = prompt }, function(value)
+          if value == nil then return end
+          if not vim.api.nvim_buf_is_loaded(bufnr) or line > vim.api.nvim_buf_line_count(bufnr) then
+            vim.notify('Breakpoint source is no longer available', vim.log.levels.WARN)
+            return
+          end
+          -- The input UI may change the current buffer/window before returning.
+          -- DAP's public breakpoint API operates on the current source line.
+          vim.api.nvim_buf_call(bufnr, function()
+            local view = vim.fn.winsaveview()
+            vim.api.nvim_win_set_cursor(0, { line, 0 })
+            local ok, err = pcall(apply, value)
+            vim.fn.winrestview(view)
+            if not ok then error(err) end
+          end)
+        end)
       end
 
       vim.keymap.set('n', '<leader>db', dap.toggle_breakpoint, {
         desc = '[D]ebug: toggle [B]reakpoint',
       })
 
-      vim.keymap.set('n', '<leader>dB', function() dap.set_breakpoint(vim.fn.input 'Breakpoint condition: ') end, {
+      vim.keymap.set('n', '<leader>dB', function()
+        prompt_breakpoint('Breakpoint condition: ', function(value) dap.set_breakpoint(value) end)
+      end, {
         desc = '[D]ebug: conditional [B]reakpoint',
       })
 
-      vim.keymap.set('n', '<leader>dh', function() dap.set_breakpoint(nil, vim.fn.input 'Hit condition: ') end, {
+      vim.keymap.set('n', '<leader>dh', function()
+        prompt_breakpoint('Hit condition (e.g. 10): ', function(value) dap.set_breakpoint(nil, value) end)
+      end, {
         desc = '[D]ebug: breakpoint [H]it condition',
       })
 
-      vim.keymap.set('n', '<leader>dl', function() dap.set_breakpoint(nil, nil, vim.fn.input 'Log point message: ') end, {
+      vim.keymap.set('n', '<leader>dl', function()
+        prompt_breakpoint('Log message ({expression} is evaluated): ', function(value) dap.set_breakpoint(nil, nil, value) end)
+      end, {
         desc = '[D]ebug: [L]og point',
       })
 
-      vim.keymap.set('n', '<leader>dr', dap.repl.open, {
+      vim.keymap.set('n', '<leader>dr', function()
+        dapview.open()
+        dapview.jump_to_view 'repl'
+      end, {
         desc = '[D]ebug: open [R]EPL',
+      })
+
+      vim.keymap.set({ 'n', 'x' }, '<leader>de', function() dapview.hover(nil, false) end, {
+        desc = '[D]ebug: [E]valuate expression (repeat to focus)',
+      })
+
+      vim.keymap.set({ 'n', 'x' }, '<leader>dw', dapview.add_expr, {
+        desc = '[D]ebug: [W]atch expression',
+      })
+
+      vim.keymap.set('n', '<leader>dC', dap.run_to_cursor, {
+        desc = '[D]ebug: run to [C]ursor',
+      })
+
+      vim.keymap.set('n', '<leader>dk', dap.up, {
+        desc = '[D]ebug: stack up',
+      })
+
+      vim.keymap.set('n', '<leader>dj', dap.down, {
+        desc = '[D]ebug: stack down',
       })
 
       vim.keymap.set('n', '<leader>dc', dap.continue, {
@@ -128,8 +248,12 @@ return {
         desc = '[D]ebug: [T]erminate',
       })
 
-      vim.keymap.set('n', '<leader>du', dapui.toggle, {
+      vim.keymap.set('n', '<leader>du', function() dapview.toggle(true) end, {
         desc = '[D]ebug: toggle [U]I',
+      })
+
+      vim.keymap.set('n', '<leader>dU', function() dapview.close(true) end, {
+        desc = '[D]ebug: hide [U]I and console (keep session)',
       })
     end,
   },

@@ -3,9 +3,24 @@
 -- Rustaceanvim, Cargo manifest tooling, formatting, runnables via Overseer
 -- ============================================================
 
+-- Rustaceanvim and native Cargo tasks share compiler and panic navigation.
+-- Keep panic headers as single-line entries. Messages and assertion left/right
+-- values remain separate context rows: embedded newlines render as NULs in
+-- Quicker's editable quickfix buffer.
+local rust_errorformat = [[%Eerror: %\%%(aborting %\|could not compile%\)%\@!%m,]]
+  .. [[%Eerror[E%n]: %m,]]
+  .. [[%Inote: %m,]]
+  .. [[%Wwarning: %\%%(%.%# warning%\)%\@!%m,]]
+  .. [[%Wwarning[E%n]: %m,]]
+  .. [[%C %#--> %f:%l:%c,]]
+  .. [[%C %#╭▸ %f:%l:%c,]]
+  .. [[%+E%.%#panicked at %f:%l:%c:,]]
+  .. [[%.%#panicked at \'%m\'\, %f:%l:%c,]]
+  .. [[%-G %#%\%%(Compiling%\|Checking%\|Finished%\|Running%\) %.%#,]]
+  .. [[%Z]]
+
 -- Runnables, tests, and crate test suites become Overseer tasks: they land
--- in the shared task list with cargo's errorformat instead of a throwaway
--- split terminal. The errorformat mirrors Overseer's own cargo template.
+-- in the shared task list instead of a throwaway split terminal.
 ---@type rustaceanvim.Executor
 local overseer_executor = {
   execute_command = function(command, args, cwd, opts)
@@ -19,13 +34,7 @@ local overseer_executor = {
           {
             'on_output_quickfix',
             open_on_exit = 'failure',
-            errorformat = [[%Eerror: %\%%(aborting %\|could not compile%\)%\@!%m,]]
-              .. [[%Eerror[E%n]: %m,]]
-              .. [[%Inote: %m,]]
-              .. [[%Wwarning: %\%%(%.%# warning%\)%\@!%m,]]
-              .. [[%C %#--> %f:%l:%c,]]
-              .. [[%E  left:%m,%C right:%m %f:%l:%c,%Z,]]
-              .. [[%.%#panicked at \'%m\'\, %f:%l:%c]],
+            errorformat = rust_errorformat,
           },
           { 'open_output', direction = 'dock', on_start = 'always' },
           'default',
@@ -274,6 +283,8 @@ return {
 
             map('<leader>rD', function() vim.cmd.RustLsp 'debuggables' end, 'Debuggables')
 
+            map('<leader>rR', function() vim.cmd.RustLsp { 'debuggables', bang = true } end, 'Rebuild and redebug last target')
+
             map('<leader>re', function() vim.cmd.RustLsp { 'explainError', 'current' } end, 'Explain error')
 
             map('<leader>rE', function() vim.cmd.RustLsp { 'renderDiagnostic', 'current' } end, 'Render diagnostic')
@@ -326,6 +337,15 @@ return {
 
   {
     'stevearc/overseer.nvim',
+    -- Requiring this eager plugin runs tasks.lua's setup before registering
+    -- the hook. Do not defer to LazyLoad: its scheduled event can miss a task
+    -- created during startup.
+    init = function()
+      require('overseer').add_template_hook({ module = '^cargo$' }, function(task_defn, util)
+        task_defn.default_component_params.errorformat = rust_errorformat
+        util.add_component(task_defn, { 'on_output_quickfix', open_on_exit = 'failure' })
+      end)
+    end,
     opts = function(_, opts)
       opts.templates = opts.templates or {}
       table.insert(opts.templates, cargo_profile_provider)

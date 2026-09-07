@@ -32,6 +32,13 @@ return {
     -- Group fragments live beside the features they describe. Preserve every
     -- `spec` entry when lazy.nvim merges those repeated plugin specifications.
     opts_extend = { 'spec' },
+    keys = {
+      {
+        '<leader>?',
+        function() require('which-key').show { global = false } end,
+        desc = 'Show buffer-local keymaps',
+      },
+    },
     opts = {
       -- Delay between pressing a key and opening which-key (milliseconds)
       delay = 0,
@@ -96,6 +103,42 @@ return {
     end,
   },
 
+  -- Noice owns command lines and command messages, not the other UI services.
+  -- Snacks keeps input/select/notifications; Blink keeps completion/signatures;
+  -- Fidget keeps progress and Rustaceanvim keeps its actionable hover.
+  {
+    'folke/noice.nvim',
+    event = 'VeryLazy',
+    dependencies = { 'MunifTanjim/nui.nvim' },
+    keys = {
+      {
+        '<leader>sM',
+        '<cmd>Noice<CR>',
+        desc = '[S]how command [M]essages',
+      },
+    },
+    opts = {
+      messages = {
+        view = 'mini',
+        view_error = 'mini',
+        view_warn = 'mini',
+      },
+      popupmenu = { enabled = false },
+      notify = { enabled = false },
+      lsp = {
+        progress = { enabled = false },
+        hover = { enabled = false },
+        signature = { enabled = false },
+        message = { enabled = false },
+      },
+      presets = {
+        bottom_search = true,
+        command_palette = true,
+        long_message_to_split = true,
+      },
+    },
+  },
+
   -- Disabled: rapid scrolling can backlog its animations and freeze Neovim.
   -- {
   -- 	"sphamba/smear-cursor.nvim",
@@ -115,6 +158,11 @@ return {
     lazy = false,
     keys = {
       {
+        '<leader>tD',
+        function() Snacks.dashboard() end,
+        desc = 'Open dashboard',
+      },
+      {
         ']w',
         function() Snacks.words.jump(vim.v.count1) end,
         mode = 'n',
@@ -128,6 +176,33 @@ return {
       },
     },
     opts = {
+      styles = {
+        dashboard = { wo = { fillchars = 'eob: ' } },
+      },
+      -- A return-to-work screen, not another project/task registry.
+      -- Mapping actions reuse navigation's root policy and explicit session controls.
+      dashboard = {
+        enabled = true,
+        width = 60,
+        preset = {
+          header = 'N E O V I M',
+          keys = {
+            { icon = '󰁯 ', key = 's', desc = 'Resume this workspace', action = '<leader>sC' },
+            { icon = '󰆓 ', key = 'S', desc = 'Choose a saved session', action = '<leader>sS' },
+            { icon = ' ', key = 'p', desc = 'Choose a project', action = '<leader>sp' },
+            { icon = ' ', key = 'f', desc = 'Find a file', action = '<leader>sf' },
+            { icon = ' ', key = 'g', desc = 'Search project text', action = '<leader>sg' },
+            { icon = ' ', key = 'r', desc = 'Recent files', action = '<leader>s.' },
+            { icon = ' ', key = 'n', desc = 'New file', action = ':ene | startinsert' },
+            { icon = ' ', key = '?', desc = 'Find a keymap', action = '<leader>sk' },
+          },
+        },
+        sections = {
+          { section = 'header', padding = 1 },
+          { section = 'keys', gap = 0, padding = 1 },
+          { section = 'recent_files', title = 'Recent files', icon = ' ', limit = 5, indent = 2, padding = 1 },
+        },
+      },
       -- Mostly invisible performance/robustness improvements.
       bigfile = { enabled = true },
       image = {

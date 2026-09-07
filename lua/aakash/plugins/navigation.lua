@@ -326,6 +326,54 @@ return {
     end,
   },
 
+  -- Whole-editor snapshots, keyed by the current project's directory.
+  -- Saving is automatic; restoring is always an explicit action.
+  {
+    'folke/persistence.nvim',
+    event = 'BufReadPre',
+    opts = { branch = false },
+    init = function()
+      vim.api.nvim_create_autocmd('User', {
+        pattern = 'PersistenceSavePre',
+        group = vim.api.nvim_create_augroup('persistence-project-root', { clear = true }),
+        callback = function() project.set(project.get()) end,
+      })
+    end,
+    keys = {
+      {
+        '<leader>sC',
+        function()
+          if not project.set(project.get()) then return end
+          local persistence = require 'persistence'
+          if vim.fn.filereadable(persistence.current()) == 0 then
+            vim.notify('No saved session for ' .. project.get())
+            return
+          end
+          persistence.load()
+        end,
+        desc = '[S]ession: restore [C]urrent project',
+      },
+      {
+        '<leader>sS',
+        function() require('persistence').select() end,
+        desc = '[S]earch saved [S]essions',
+      },
+      {
+        '<leader>sL',
+        function() require('persistence').load { last = true } end,
+        desc = '[S]ession: restore [L]ast',
+      },
+      {
+        '<leader>tS',
+        function()
+          require('persistence').stop()
+          vim.notify 'This editor session will not be saved on exit'
+        end,
+        desc = 'Stop saving this session',
+      },
+    },
+  },
+
   {
     'folke/which-key.nvim',
     opts = function(_, opts)
