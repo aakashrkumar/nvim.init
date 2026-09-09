@@ -60,6 +60,36 @@ for _, root in ipairs(tool_roots) do
   table.insert(query_drivers, root .. '/**/esp-clang/bin/clang*')
 end
 
+-- Use pretty_hover's parser API, but keep native LSP position handling:
+-- pretty_hover.hover() currently assumes UTF-16, while clangd can negotiate UTF-8.
+---@param client vim.lsp.Client
+local function hover_documentation(client)
+  local bufnr, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+  local cursor = vim.api.nvim_win_get_cursor(win)
+  client:request('textDocument/hover', vim.lsp.util.make_position_params(win, client.offset_encoding), function(err, result)
+    -- A slow response must not open documentation over a different symbol.
+    if vim.api.nvim_get_current_win() ~= win or vim.api.nvim_get_current_buf() ~= bufnr or not vim.deep_equal(vim.api.nvim_win_get_cursor(win), cursor) then
+      return
+    end
+    if err then return vim.notify(err.message, vim.log.levels.ERROR) end
+    if not result or not result.contents then return vim.notify 'No information available' end
+
+    local lines = vim.lsp.util.convert_input_to_markdown_lines(result.contents)
+    for i, line in ipairs(lines) do
+      -- Keep Doxygen directions: pretty_hover recognizes @param, not @param[in].
+      lines[i] = line:gsub('^(%s*[\\@]param)%[([^]]+)%]%s+(%S+)', '%1 %3 (%2)')
+    end
+    local parsed = require('pretty_hover.parser').parse(lines)
+    if #parsed.text == 0 then return vim.notify 'No information available' end
+    local float_buf = vim.lsp.util.open_floating_preview(parsed.text, 'markdown', {
+      border = 'rounded',
+      max_width = 88,
+      focus_id = 'textDocument/hover',
+    })
+    require('pretty_hover.highlight').apply_highlight(parsed.highlighting, float_buf)
+  end, bufnr)
+end
+
 ---@type table<string, vim.lsp.Config>
 local servers = {
   clangd = {
@@ -73,7 +103,7 @@ local servers = {
       '--fallback-style=llvm',
       '--query-driver=' .. table.concat(query_drivers, ','),
     }),
-    on_attach = function(_, bufnr)
+    on_attach = function(client, bufnr)
       local map = function(mode, lhs, rhs, desc)
         vim.keymap.set(mode, lhs, rhs, {
           buffer = bufnr,
@@ -81,6 +111,10 @@ local servers = {
           desc = 'C: ' .. desc,
         })
       end
+
+      -- pretty_hover turns Doxygen annotations into readable Markdown.
+      -- K again focuses the window; Ctrl-d / Ctrl-u scroll and q closes it.
+      map('n', 'K', function() hover_documentation(client) end, 'Hover documentation (repeat to focus)')
 
       map('n', '<leader>ch', '<cmd>ClangdSwitchSourceHeader<CR>', 'Switch source/[H]eader')
       map('n', '<leader>cT', '<cmd>ClangdTypeHierarchy<CR>', '[T]ype hierarchy')
@@ -131,6 +165,12 @@ return {
         opts.servers[name] = server
       end
     end,
+  },
+
+  {
+    'Fildo7525/pretty_hover',
+    ft = { 'c', 'cpp', 'objc', 'objcpp', 'cuda' },
+    opts = {},
   },
 
   -- Commands for clangd's protocol extensions: source/header switching,

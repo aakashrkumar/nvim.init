@@ -337,18 +337,17 @@ return {
 
   {
     'stevearc/overseer.nvim',
-    -- Requiring this eager plugin runs tasks.lua's setup before registering
-    -- the hook. Do not defer to LazyLoad: its scheduled event can miss a task
-    -- created during startup.
-    init = function()
-      require('overseer').add_template_hook({ module = '^cargo$' }, function(task_defn, util)
-        task_defn.default_component_params.errorformat = rust_errorformat
-        util.add_component(task_defn, { 'on_output_quickfix', open_on_exit = 'failure' })
-      end)
-    end,
     opts = function(_, opts)
       opts.templates = opts.templates or {}
       table.insert(opts.templates, cargo_profile_provider)
+      opts.template_hooks = opts.template_hooks or {}
+      table.insert(opts.template_hooks, {
+        opts = { module = '^cargo$' },
+        hook = function(task_defn, util)
+          task_defn.default_component_params.errorformat = rust_errorformat
+          util.add_component(task_defn, { 'on_output_quickfix', open_on_exit = 'failure' })
+        end,
+      })
     end,
   },
 

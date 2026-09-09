@@ -28,6 +28,19 @@ return {
             virtual_lines = true,
           },
         },
+        -- Documentation is read, not edited. Keep scratch Markdown rendered
+        -- while focusing or selecting text, without code-language badges.
+        overrides = {
+          buftype = {
+            nofile = {
+              anti_conceal = { enabled = false },
+              code = { language = false },
+              win_options = {
+                concealcursor = { rendered = 'nvic' },
+              },
+            },
+          },
+        },
         -- Snacks.image owns graphical LaTeX rendering.
         latex = { enabled = false },
 
@@ -57,6 +70,9 @@ return {
         group = vim.api.nvim_create_augroup('markdown-writing', { clear = true }),
         pattern = 'markdown',
         callback = function(args)
+          -- Hover and plugin previews own their scratch-buffer options.
+          if vim.bo[args.buf].buftype ~= '' then return end
+
           -- Visually wrap long paragraphs without altering the file.
           vim.opt_local.wrap = true
           vim.opt_local.linebreak = true
@@ -69,7 +85,7 @@ return {
           -- Treesitter clears regex syntax when it starts; add this match afterward.
           local bufnr = args.buf
           vim.schedule(function()
-            if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= 'markdown' then return end
+            if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= 'markdown' or vim.bo[bufnr].buftype ~= '' then return end
             vim.api.nvim_buf_call(bufnr, function() vim.cmd.syntax [[match MarkdownSelfNote /{[^{}]*}/ contains=@Spell]] end)
           end)
 

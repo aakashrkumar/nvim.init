@@ -137,6 +137,18 @@ return {
       mason_opts.servers = nil
       require('mason-lspconfig').setup(mason_opts)
 
+      -- Neovim marks its previews before setting their Markdown filetype.
+      -- Other plugins' Markdown windows must keep their own highlights.
+      vim.api.nvim_create_autocmd('FileType', {
+        group = vim.api.nvim_create_augroup('aakash-lsp-documentation', { clear = true }),
+        pattern = 'markdown',
+        callback = function(event)
+          for _, win in ipairs(vim.fn.win_findbuf(event.buf)) do
+            if vim.w[win].lsp_floating_bufnr then vim.wo[win].winhighlight = 'NormalFloat:LspDocumentation,FloatBorder:LspDocumentationBorder' end
+          end
+        end,
+      })
+
       --  This function gets run when an LSP attaches to a particular buffer.
       --    That is to say, every time a new file is opened that is associated with
       --    an lsp (for example, opening `main.rs` is associated with `rust_analyzer`) this
@@ -155,6 +167,13 @@ return {
           end
 
           local client = vim.lsp.get_client_by_id(event.data.client_id)
+
+          -- Keep ordinary documentation readable without restricting its height.
+          -- Language-specific on_attach callbacks run afterward: C uses
+          -- pretty_hover and Rust keeps Rustaceanvim's actionable hover.
+          if client and client:supports_method('textDocument/hover', event.buf) then
+            map('K', function() vim.lsp.buf.hover { border = 'rounded', max_width = 88 } end, 'Hover documentation (repeat to focus)')
+          end
 
           -- Rename the variable under your cursor.
           --  Most Language Servers support renaming across files, etc.

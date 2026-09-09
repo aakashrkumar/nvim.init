@@ -44,50 +44,146 @@ return {
       local dap = require 'dap'
       local dapview = require 'dap-view'
 
+      local controls = { 'play', 'step_over', 'step_into', 'step_out', 'terminate', 'disconnect' }
+      local sections = {
+        { id = 'scopes', name = 'Variables', short = 'Vars', key = 'S' },
+        { id = 'watches', name = 'Watches', short = 'Watch', key = 'W' },
+        { id = 'threads', name = 'Call stack', short = 'Stack', key = 'T' },
+        { id = 'breakpoints', name = 'Breakpoints', short = 'BP', key = 'B' },
+        { id = 'exceptions', name = 'Exceptions', short = 'EX', key = 'E' },
+        { id = 'repl', name = 'REPL', short = 'REPL', key = 'R' },
+      }
+      -- The native winbar has one line. Keep names until they no longer fit,
+      -- then shorten less-used tabs first and the selected tab last.
+      local full_width = #controls * 3 -- one-cell icons, with a space on each side
+      for _, section in ipairs(sections) do
+        section.labels = { section.name .. ' [' .. section.key .. ']', section.short .. ':' .. section.key, section.key }
+        section.widths = {}
+        for tier, label in ipairs(section.labels) do
+          section.widths[tier] = vim.fn.strdisplaywidth(label)
+        end
+        full_width = full_width + section.widths[1] + 2
+      end
+
+      local cached_width, cached_current, cached_labels
+      local function fitted_labels(width, current)
+        if width == cached_width and current == cached_current then return cached_labels end
+        local labels, active, used = {}, nil, full_width
+        for index, section in ipairs(sections) do
+          labels[index] = section.labels[1]
+          if section.id == current then active = index end
+        end
+        for tier = 2, 3 do
+          for index = #sections, 1, -1 do
+            if used <= width then break end
+            if index ~= active then
+              local section = sections[index]
+              used = used - section.widths[tier - 1] + section.widths[tier]
+              labels[index] = section.labels[tier]
+            end
+          end
+        end
+        if used > width and active then
+          local section = sections[active]
+          for tier = 2, 3 do
+            if used <= width then break end
+            used = used - section.widths[tier - 1] + section.widths[tier]
+            labels[active] = section.labels[tier]
+          end
+        end
+        cached_width, cached_current, cached_labels = width, current, labels
+        return labels
+      end
+
+      local section_order, base_sections = {}, {}
+      for index, section in ipairs(sections) do
+        local slot = index
+        local full_name = section.labels[1]
+        section_order[index] = section.id
+        base_sections[section.id] = {
+          keymap = section.key,
+          label = function(width, current) return width == 0 and full_name or fitted_labels(width, current)[slot] end,
+        }
+      end
+
+      local function sidebar_width()
+        local preferred = math.max(full_width, math.floor(vim.o.columns * 0.38))
+        local limit = math.max((#sections + #controls) * 3, math.floor(vim.o.columns / 2))
+        return math.min(preferred, limit)
+      end
+
       dapview.setup {
         winbar = {
-          sections = { 'scopes', 'watches', 'threads', 'breakpoints', 'exceptions', 'repl' },
+          sections = section_order,
           default_section = 'scopes',
-          show_keymap_hints = false,
-          -- Keep readable key hints and controls visible beside the console.
-          base_sections = {
-            scopes = { label = 'Vars:S', keymap = 'S' },
-            watches = { label = 'Watch:W', keymap = 'W' },
-            threads = { label = 'Stack:T', keymap = 'T' },
-            breakpoints = { label = 'BP:B', keymap = 'B' },
-            exceptions = { label = 'EX:E', keymap = 'E' },
-            repl = { label = 'REPL:R', keymap = 'R' },
-          },
+          show_keymap_hints = false, -- the fitted labels already contain their keys
+          base_sections = base_sections,
           controls = {
             enabled = true,
-            buttons = { 'play', 'step_over', 'step_into', 'step_out', 'terminate', 'disconnect' },
+            buttons = controls,
           },
         },
         windows = {
-          size = 0.33,
-          position = 'below',
-          terminal = { size = 0.35, position = 'right' },
+          -- Prefer full names on wide screens; normally reserve at least half
+          -- the editor for source, with a minimum width for controls and key tabs.
+          -- Dap-view reapplies its opening width when windows open/close, including floats.
+          -- This policy sets that width; ad-hoc resizing can be undone by a popup.
+          size = sidebar_width,
+          position = 'right',
+          terminal = { size = 0.31, position = 'below' },
         },
         hover = { border = 'rounded' },
         help = { border = 'rounded' },
-        virtual_text = { enabled = true, position = 'eol' },
+        virtual_text = {
+          enabled = true,
+          position = 'eol',
+          -- Preserve the adapter's full value summary and type without imposing
+          -- a character limit. Keep multiline summaries on a single source line.
+          format = function(variable)
+            local value = ' ' .. variable.value:gsub('[\r\n]+', ' ↵ ')
+            if variable.type and variable.type ~= '' then return value .. ' : ' .. variable.type end
+            return value
+          end,
+          suffix = function(position, _, _, index, count)
+            if position ~= 'inline' then return index < count and ', ' or '' end
+          end,
+        },
         auto_toggle = 'keep_terminal',
         follow_tab = true,
       }
+
+      -- Dap-view refreshes labels on section changes, but not pane resizes.
+      vim.api.nvim_create_autocmd({ 'WinResized', 'VimResized' }, {
+        group = vim.api.nvim_create_augroup('aakash-dap-layout', { clear = true }),
+        callback = function()
+          local winbar = package.loaded['dap-view.options.winbar']
+          if not winbar then return end
+          winbar.refresh_winbar()
+        end,
+      })
 
       -- Reuse visible source buffers, otherwise open a safe tab rather than
       -- replacing a debugger pane. The dock follows native DAP source jumps.
       dap.defaults.fallback.switchbuf = 'usevisible,usetab,newtab'
 
-      -- Internal buffer URIs are not useful status labels for the debug dock.
-      vim.api.nvim_create_autocmd('FileType', {
-        pattern = { 'dap-view', 'dap-view-term', 'dap-repl' },
+      -- Keep debugger surfaces distinct from source windows. BufWinEnter also
+      -- covers reused REPL/console buffers after a session or layout change.
+      local titles = { ['dap-view'] = 'Debug inspector', ['dap-view-term'] = 'Program output', ['dap-repl'] = 'Debug REPL' }
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
         group = vim.api.nvim_create_augroup('aakash-dap-statusline', { clear = true }),
         callback = function(event)
-          local titles = { ['dap-view'] = 'Debug inspector', ['dap-view-term'] = 'Program output', ['dap-repl'] = 'Debug REPL' }
-          local text = '%#MiniStatuslineDevinfo# ' .. titles[vim.bo[event.buf].filetype] .. ' %='
-          local function content() return text end
-          vim.b[event.buf].ministatusline_config = { content = { active = content, inactive = content } }
+          local filetype = vim.bo[event.buf].filetype
+          if filetype ~= 'dap-repl' and not filetype:match '^dap%-view' then return end
+          if titles[filetype] and not vim.b[event.buf].ministatusline_config then
+            local text = '%#DapViewStatusLine# ' .. titles[filetype] .. ' %='
+            local function content() return text end
+            vim.b[event.buf].ministatusline_config = { content = { active = content, inactive = content } }
+          end
+          for _, win in ipairs(vim.fn.win_findbuf(event.buf)) do
+            vim.wo[win][0].winhighlight =
+              'Normal:DapViewNormal,NormalNC:DapViewNormal,NormalFloat:DapViewNormal,FloatBorder:DapViewSeparator,CursorLine:DapViewCursorLine,WinSeparator:DapViewSeparator'
+            vim.wo[win][0].fillchars = 'eob: '
+          end
         end,
       })
 

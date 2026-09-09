@@ -33,24 +33,28 @@ return {
     -- nvim-dap `preLaunchTask` hook and every registered template available
     -- from the first `:OverseerRun`.
     lazy = false,
-    -- `templates` is not an Overseer option. Language modules append template
-    -- definitions or providers to it through lazy.nvim's merged `opts`, and
-    -- `config` registers them after setup. This mirrors the `servers`
-    -- registry in `lsp.lua`: one setup path, extended per language.
-    opts_extend = { 'templates' },
+    -- Feature modules append templates and template hooks through merged opts.
+    -- These are local extension lists, removed before Overseer's own setup.
+    -- One config owner avoids competing init/config callbacks across features.
+    opts_extend = { 'templates', 'template_hooks' },
     opts = {
       ---@type (overseer.TemplateFileDefinition|overseer.TemplateFileProvider)[]
       templates = {},
+      ---@type { opts: overseer.HookOptions, hook: fun(task_defn: overseer.TaskDefinition, util: overseer.TaskUtil) }[]
+      template_hooks = {},
       form = { border = 'rounded' },
       task_win = { border = 'rounded' },
     },
     config = function(_, opts)
       local overseer = require 'overseer'
-      local templates = opts.templates
-      opts.templates = nil
+      local templates, template_hooks = opts.templates, opts.template_hooks
+      opts.templates, opts.template_hooks = nil, nil
       overseer.setup(opts)
       for _, template in ipairs(templates) do
         overseer.register_template(template)
+      end
+      for _, hook in ipairs(template_hooks) do
+        overseer.add_template_hook(hook.opts, hook.hook)
       end
     end,
     keys = {
