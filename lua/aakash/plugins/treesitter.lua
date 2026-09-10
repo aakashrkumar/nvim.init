@@ -17,6 +17,7 @@ return {
       -- NOTE: You can also specify a branch or a specific commit
 
       -- Ensure basic parsers are installed
+      -- Keep latex for Markdown math injections even though VimTeX owns .tex buffers.
       local parsers = { 'bash', 'c', 'diff', 'html', 'latex', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
       require('nvim-treesitter').install(parsers)
 
@@ -76,6 +77,9 @@ return {
         desc = 'Install and attach Treesitter for the buffer language',
         callback = function(args)
           local buf, filetype = args.buf, args.match
+          -- VimTeX's math text objects depend on its syntax groups. It also
+          -- owns indentation and folds in TeX/BibTeX; see :help vimtex-faq-treesitter.
+          if filetype == 'tex' or filetype == 'bib' then return end
 
           local language = vim.treesitter.language.get_lang(filetype)
           if not language then return end
@@ -122,6 +126,9 @@ return {
       }
 
       local function set_textobject_mappings(buf)
+        -- Keep VimTeX's buffer-local environment motions ([m, ]m, etc.).
+        if buf and vim.bo[buf].filetype == 'tex' then return end
+
         for lhs, mapping in pairs(mappings) do
           vim.keymap.set(
             modes,
