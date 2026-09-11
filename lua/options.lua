@@ -19,6 +19,15 @@ vim.g.have_nerd_font = true
 -- NOTE: You can change these options as you wish!
 --  For more options, you can see `:help option-list`
 
+-- Four-space defaults; explicit project settings and filetype requirements can override them.
+vim.o.expandtab = true
+vim.o.tabstop = 4
+vim.o.shiftwidth = 4
+vim.o.softtabstop = -1 -- Follow shiftwidth for Tab and Backspace.
+
+-- Use the same formatter for gq and <leader>f, including before an LSP attaches.
+vim.o.formatexpr = "v:lua.require'aakash.formatting'.formatexpr()"
+
 -- Make line numbers default
 vim.o.number = true
 -- You can also add relative line numbers, to help with jumping.
@@ -30,6 +39,9 @@ vim.o.mouse = 'a'
 
 -- Don't show the mode, since it's already in the status line
 vim.o.showmode = false
+
+-- One editor-wide statusline keeps project problem counts visible across splits.
+vim.o.laststatus = 3
 
 -- Hide the command line when it is not in use
 vim.o.cmdheight = 0
