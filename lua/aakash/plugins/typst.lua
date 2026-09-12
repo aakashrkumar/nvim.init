@@ -1,7 +1,6 @@
--- ============================================================
--- TYPST
--- Tinymist language services and native live browser preview
--- ============================================================
+-- [[ Typst ]]
+-- Tinymist joins the shared LSP registry for language services and formatting.
+-- typst-preview provides a live browser preview without a second compiler.
 
 return {
     {
@@ -9,8 +8,8 @@ return {
         opts = {
             servers = {
                 tinymist = {
-                    -- lsp.lua owns setup; inherit nvim-lspconfig's on_attach, including
-                    -- :LspTinymistExportPdf and :LspTinymistPinMain. See :help lsp-config.
+                    -- Inherit nvim-lspconfig's on_attach for :LspTinymistExportPdf
+                    -- and :LspTinymistPinMain. See :help lsp-config.
                     settings = {
                         -- Tinymist bundles typstyle. The shared Conform <leader>f uses its
                         -- LSP fallback; no external formatter or format-on-save is needed.
@@ -33,6 +32,7 @@ return {
         end,
     },
 
+    -- [[ Live preview ]]
     {
         'chomosuke/typst-preview.nvim',
         version = '1.*',

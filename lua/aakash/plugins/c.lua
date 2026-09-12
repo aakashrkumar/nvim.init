@@ -1,10 +1,10 @@
--- ============================================================
--- C / C++
--- clangd, CMake workflow, formatting, and native debugging
--- ============================================================
+-- [[ C and C++ ]]
+-- clangd handles language services; CMake and DAP share the project root.
+-- Keep ESP-aware compiler discovery here so native and embedded projects coexist.
 
 local project = require 'aakash.project'
 
+-- [[ Compiler discovery ]]
 -- idf_tools.py installs below $IDF_TOOLS_PATH/tools; EIM instead sets
 -- IDF_TOOLS_PATH to the tools directory itself. Try both before the default.
 local espressif = vim.fs.normalize(vim.env.IDF_TOOLS_PATH or '~/.espressif')
@@ -60,6 +60,7 @@ for _, root in ipairs(tool_roots) do
     table.insert(query_drivers, root .. '/**/esp-clang/bin/clang*')
 end
 
+-- [[ Documentation and language actions ]]
 -- Use pretty_hover's parser API, but keep native LSP position handling:
 -- pretty_hover.hover() currently assumes UTF-16, while clangd can negotiate UTF-8.
 ---@param client vim.lsp.Client
@@ -126,6 +127,7 @@ local servers = {
 
 local cmake_filetypes = { 'c', 'cpp', 'cmake' }
 
+-- [[ CMake and native debugging ]]
 -- Only these keys opt into the canonical root. Changing cwd through
 -- project.set lets cmake-tools' DirChanged hook save/reload project sessions;
 -- native :CMake* commands keep their documented cwd scope.
@@ -159,12 +161,7 @@ local native_debug_configurations = {
 return {
     {
         'mason-org/mason-lspconfig.nvim',
-        opts = function(_, opts)
-            opts.servers = opts.servers or {}
-            for name, server in pairs(servers) do
-                opts.servers[name] = server
-            end
-        end,
+        opts = { servers = servers },
     },
 
     {
@@ -247,6 +244,8 @@ return {
         },
     },
 
+    -- [[ Formatting ]]
+    -- Use clang-format rather than clangd, but only format on save with a project style.
     {
         'stevearc/conform.nvim',
         opts = function(_, opts)

@@ -1,8 +1,8 @@
+-- [[ Formatting ]]
+-- Conform owns formatter execution. Language modules add filetypes and save
+-- policies through these options; :ConformInfo explains which formatter runs.
+
 return {
-    -- ============================================================
-    -- FORMATTING
-    -- conform.nvim setup and keymap
-    -- ============================================================
     {
         'stevearc/conform.nvim',
         -- Conform documents `BufWritePre` for format-on-save, `ConformInfo` for

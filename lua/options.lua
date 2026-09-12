@@ -1,7 +1,7 @@
--- ============================================================
--- SECTION 1: OPTIONS
--- Core Neovim settings, leaders, options, basic keymaps, basic autocmds
--- ============================================================
+-- [[ Editor options ]]
+-- These defaults are loaded before plugins. Filetype and project settings can
+-- override them; see `:help options` and `:help editorconfig`.
+
 -- Enable faster startup by caching compiled Lua modules
 vim.loader.enable()
 
@@ -25,7 +25,7 @@ vim.o.tabstop = 4
 vim.o.shiftwidth = 4
 vim.o.softtabstop = -1 -- Follow shiftwidth for Tab and Backspace.
 
--- Use the same formatter for gq and <leader>f, including before an LSP attaches.
+-- Route gq and <leader>f through Conform, with native wrapping for plain text.
 vim.o.formatexpr = "v:lua.require'aakash.formatting'.formatexpr()"
 
 -- Make line numbers default
@@ -79,8 +79,9 @@ vim.o.timeoutlen = 600
 vim.o.splitright = true
 vim.o.splitbelow = true
 
--- Set the default fold level for tree sitter fold
+-- Start with folds open; Treesitter and VimTeX choose how folds are calculated.
 vim.o.foldlevel = 99
+
 -- Sets how neovim will display certain whitespace characters in the editor.
 --  See `:help 'list'`
 --  and `:help 'listchars'`

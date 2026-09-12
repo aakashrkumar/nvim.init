@@ -52,8 +52,7 @@ Kickstart Guide:
 
     (If you already know the Neovim basics, you can skip this step.)
 
-  Once you've completed that, you can continue working through **AND READING** the rest
-  of the kickstart init.lua.
+  Once you've completed that, continue reading this file and the Lua modules it loads.
 
   Next, run AND READ `:help`.
     This will open up a help window with some basic information
@@ -65,13 +64,13 @@ Kickstart Guide:
     MOST IMPORTANTLY, we provide a keymap "<space>sh" to [s]earch the [h]elp documentation,
     which is very useful when you're not exactly sure of what you're looking for.
 
-  I have left several `:help X` comments throughout the init.lua
+  There are `:help X` comments throughout these modules.
     These are hints about where to find more information about the relevant settings,
     plugins or Neovim features used in Kickstart.
 
    NOTE: Look for lines like this
 
-    Throughout the file. These are for you, the reader, to help you understand what is happening.
+    Throughout the configuration. They explain what is happening and where to learn more.
     Feel free to delete them once you know what you're doing, but they should serve as a guide
     for when you are first encountering a few different constructs in your Neovim config.
 
@@ -86,6 +85,11 @@ P.S. You can delete this when you're done too. It's your config now! :)
 -- This configuration is split into small Lua modules so startup concerns and
 -- plugin modules have clear homes. Lua's `require` loads each module once and
 -- caches its return value; see `:help lua-guide-modules` and `:help require`.
+--
+-- Start with `options` and `keymaps` for native Neovim behavior.
+-- Feature specs live in `aakash/plugins`; language files extend shared LSP,
+-- formatting, task, and debug setup. Helpers such as `aakash.project`,
+-- `aakash.diagnostics`, and `aakash.statusline` own the small custom integrations.
 
 -- [[ Setting options ]]
 -- Leaders and editor options must be set before plugin specifications are loaded.
@@ -96,7 +100,7 @@ require 'options'
 require 'keymaps'
 
 -- [[ Project root ]]
--- An explicit tab root wins; otherwise tools detect the current language workspace.
+-- An explicit tab root wins; tool windows retain the last source project.
 require('aakash.project').setup()
 
 -- [[ Configure and install plugins ]]
@@ -109,13 +113,9 @@ require 'aakash.lazy'
 --
 -- NOTE: Next step on your Neovim journey: add/configure additional plugins.
 --
--- Upstream Kickstart used `lua/kickstart/` for configuration maintained by the
--- template and `lua/custom/` as the user's extension point. This is now your
--- personal configuration: all active modules are deliberately owned together
--- under `aakash/`, so retaining that old ownership split would be misleading.
--- `_examples/` has a different purpose. It contains disabled learning material
--- and sits outside the imported `aakash.plugins` namespace so lazy.nvim cannot
--- enable an example simply because its file exists.
+-- All active modules belong to this personal configuration under `aakash/`.
+-- `_examples/` holds disabled learning material outside the imported plugin
+-- namespace, so adding an example file cannot enable it accidentally.
 --
 -- To try one, read its comments and move or adapt its returned spec into the
 -- relevant feature module under `lua/aakash/plugins/`. Restart Neovim afterward

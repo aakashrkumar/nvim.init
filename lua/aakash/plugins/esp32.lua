@@ -1,7 +1,6 @@
--- ============================================================
--- ESP32
--- ESP-IDF and PlatformIO tasks, ESP-IDF debugging over OpenOCD
--- ============================================================
+-- [[ ESP32 ]]
+-- ESP-IDF and PlatformIO commands use the shared Overseer task runner.
+-- ESP-IDF debugging uses its activated toolchain and generated build metadata.
 
 -- [[ ESP-IDF environment ]]
 -- idf.py, the cross toolchains, and OpenOCD only exist inside an activated

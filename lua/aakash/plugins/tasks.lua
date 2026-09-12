@@ -1,7 +1,7 @@
--- ============================================================
--- TASKS
--- Overseer task runner: setup, task template registry, keymaps
--- ============================================================
+-- [[ Build and run tasks ]]
+-- Overseer owns execution, output, restart, and disposal. Language modules
+-- add templates here rather than creating separate task runners.
+-- Use <leader>bl for the task list and <leader>ba for task actions.
 
 local project = require 'aakash.project'
 

@@ -12,25 +12,25 @@
 -- downloaded plugins separate from this configuration; see `:help stdpath()`.
 local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
-  local lazyrepo = 'https://github.com/folke/lazy.nvim.git'
-  local clone_output = vim.fn.system {
-    'git',
-    'clone',
-    '--filter=blob:none',
-    '--branch=stable',
-    lazyrepo,
-    lazypath,
-  }
+    local lazyrepo = 'https://github.com/folke/lazy.nvim.git'
+    local clone_output = vim.fn.system {
+        'git',
+        'clone',
+        '--filter=blob:none',
+        '--branch=stable',
+        lazyrepo,
+        lazypath,
+    }
 
-  if vim.v.shell_error ~= 0 then
-    vim.api.nvim_echo({
-      { 'Failed to clone lazy.nvim:\n', 'ErrorMsg' },
-      { clone_output, 'WarningMsg' },
-      { '\nPress any key to exit...' },
-    }, true, {})
-    vim.fn.getchar()
-    os.exit(1)
-  end
+    if vim.v.shell_error ~= 0 then
+        vim.api.nvim_echo({
+            { 'Failed to clone lazy.nvim:\n', 'ErrorMsg' },
+            { clone_output, 'WarningMsg' },
+            { '\nPress any key to exit...' },
+        }, true, {})
+        vim.fn.getchar()
+        os.exit(1)
+    end
 end
 
 -- Prepending the directory to `runtimepath` makes lazy.nvim's Lua modules and
@@ -51,6 +51,10 @@ vim.opt.runtimepath:prepend(lazypath)
 -- `aakash/_examples`, outside the imported namespace, and cannot turn on merely
 -- because a new example file exists.
 --
+-- Each plugin has one setup owner. Language modules add dictionary options,
+-- such as `servers`, through normal merging. They append lists in `opts`
+-- functions so an alphabetically later module cannot replace earlier entries.
+--
 -- Useful commands:
 --   :Lazy          inspect installed plugins and task output
 --   :Lazy check    check whether updates are available
@@ -61,14 +65,14 @@ vim.opt.runtimepath:prepend(lazypath)
 -- `lazy-lock.json` should be kept in version control so another installation can
 -- restore the same revisions. See https://lazy.folke.io/usage/lockfile.
 require('lazy').setup {
-  spec = {
-    { import = 'aakash.plugins' },
-  },
-  install = { colorscheme = { 'catppuccin' } },
+    spec = {
+        { import = 'aakash.plugins' },
+    },
+    install = { colorscheme = { 'catppuccin' } },
 
-  -- lazy.nvim can install LuaRocks dependencies for plugins that ship a
-  -- rockspec. None of this configuration's plugins require that package
-  -- source, so disable it instead of provisioning a separate hererocks Lua.
-  -- See `:help lazy.nvim-📦-packages-rockspec` and `:checkhealth lazy`.
-  rocks = { enabled = false },
+    -- lazy.nvim can install LuaRocks dependencies for plugins that ship a
+    -- rockspec. None of this configuration's plugins require that package
+    -- source, so disable it instead of provisioning a separate hererocks Lua.
+    -- See `:help lazy.nvim-📦-packages-rockspec` and `:checkhealth lazy`.
+    rocks = { enabled = false },
 }

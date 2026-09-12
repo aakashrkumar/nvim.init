@@ -1,8 +1,9 @@
+-- [[ Debugging ]]
+-- nvim-dap owns sessions; dap-view provides the inspector, console, and values.
+-- Language modules contribute adapters and launch configurations below.
+-- See `:help dap` for the debugger's commands and session model.
+
 return {
-    -- ============================================================
-    -- DEBUGGING
-    -- Shared DAP UI, lifecycle, and keymaps
-    -- ============================================================
 
     -- nvim-dap has no `setup()`. Language modules add adapters and
     -- configurations through these merged `opts` (mirroring the `servers`

@@ -1,13 +1,9 @@
 return {
-    -- [[ Installing and Configuring Plugins ]]
-    --
-    -- lazy.nvim plugin specifications are Lua tables. The first value identifies
-    -- the GitHub repository; other keys describe configuration and loading.
-    --
-    -- For most plugins it is not enough to install them: their `setup()` function
-    -- must also run. lazy.nvim's `opts` field calls that setup function with the
-    -- table you provide. Use `config` when setup requires additional Lua logic.
+    -- [[ Editing tools ]]
+    -- lazy.nvim's `opts` calls a plugin's setup function with that table.
+    -- Use `config` when setup also needs mappings or several Mini modules.
 
+    -- [[ Todo comments ]]
     -- Highlight todo-style comments and search them through Snacks Picker.
     {
         'folke/todo-comments.nvim',
@@ -33,17 +29,15 @@ return {
         opts = { signs = false },
     },
 
-    -- treesitter text objets
+    -- [[ Mini.nvim ]]
+    -- One config owns these small, independent editing and navigation modules.
     {
         'nvim-mini/mini.nvim',
         dependencies = {
             'nvim-treesitter/nvim-treesitter-textobjects',
         },
         config = function()
-            -- [[ mini.nvim ]]
             local project = require 'aakash.project'
-
-            --  A collection of various small independent plugins/modules
 
             -- If a nerd font is available, load the icons module for pretty icons in various plugins.
             if vim.g.have_nerd_font then
@@ -52,13 +46,14 @@ return {
                 MiniIcons.mock_nvim_web_devicons()
             end
 
-            -- Better Around/Inside textobjects
+            -- [[ Text objects ]]
             --
             -- Examples:
             --  - va)  - [V]isually select [A]round [)]paren
             --  - yiNq - [Y]ank [I]nside [N]ext [Q]uote
             --  - ci'  - [C]hange [I]nside [']quote
 
+            -- See :help MiniAi-builtin-textobjects for the complete set.
             local ai = require 'mini.ai'
             require('mini.ai').setup {
                 -- Preserve native an/in incremental selection (Neovim>=0.12) and the aa argument textobject.
@@ -106,46 +101,16 @@ return {
                 },
             }
 
-            -- Add/delete/replace surroundings (brackets, quotes, etc.)
+            -- [[ Surroundings ]]
             --
             -- - saiw) - [S]urround [A]dd [I]nner [W]ord [)]Paren
             -- - sd'   - [S]urround [D]elete [']quotes
             -- - sr)'  - [S]urround [R]eplace [)] [']
             require('mini.surround').setup()
 
-            -- Keep Mini's sections, with persistent project problems on the right.
-            local statusline = require 'mini.statusline'
-            local diagnostics = require 'aakash.diagnostics'
-            statusline.setup {
-                use_icons = vim.g.have_nerd_font,
-                content = {
-                    active = function()
-                        local mode, mode_hl = statusline.section_mode { trunc_width = 120 }
-                        local git = statusline.section_git { trunc_width = 40 }
-                        local diff = statusline.section_diff { trunc_width = 75 }
-                        local lsp = statusline.section_lsp { trunc_width = 75 }
-                        local filename = statusline.section_filename { trunc_width = 140 }
-                        local fileinfo = not statusline.is_truncated(100) and statusline.section_fileinfo { trunc_width = 120 } or ''
-                        local location = statusline.section_location { trunc_width = 75 }
-                        local search = statusline.section_searchcount { trunc_width = 75 }
-                        return statusline.combine_groups {
-                            { hl = mode_hl, strings = { mode } },
-                            { hl = 'MiniStatuslineDevinfo', strings = { git, diff, lsp } },
-                            '%<', -- Shorten the filename before dropping project counts.
-                            { hl = 'MiniStatuslineFilename', strings = { filename } },
-                            '%=',
-                            { hl = 'MiniStatuslineFileinfo', strings = { diagnostics.section(), fileinfo } },
-                            { hl = mode_hl, strings = { search, location } },
-                        }
-                    end,
-                },
-            }
-            diagnostics.setup()
+            require('aakash.statusline').setup()
 
-            -- Keep the compact LINE:COLUMN location.
-            ---@diagnostic disable-next-line: duplicate-set-field
-            statusline.section_location = function() return '%2l:%-2v' end
-
+            -- [[ File navigation ]]
             -- MiniFiles natively notifies LSP servers before/after file operations.
             -- Keep that path enabled; adding a rename autocmd would notify them twice.
             require('mini.files').setup {
@@ -160,6 +125,7 @@ return {
 
             vim.keymap.set('n', '<leader>e', function() MiniFiles.open(project.get()) end, { desc = 'File [E]xplorer (project root)' })
 
+            -- [[ Structural editing ]]
             require('mini.pairs').setup()
             require('mini.bracketed').setup {
                 -- Keep native diff, word-reference, and persistent yank-history navigation.
@@ -170,14 +136,16 @@ return {
             require('mini.splitjoin').setup()
             require('mini.align').setup()
 
+            -- [[ Recently visited files ]]
             local visits = require 'mini.visits'
             visits.setup()
             vim.keymap.set('n', '<leader>sv', function() visits.select_path(project.get()) end, { desc = '[S]earch [V]isited files' })
-            -- ... and there is more!
-            --  Check out: https://github.com/nvim-mini/mini.nvim
+            -- See :help MiniVisits for filtering and sorting visit history.
         end,
     },
 
+    -- [[ Increment and decrement ]]
+    -- Dial extends <C-a>/<C-x> while keeping normal, visual, and g-prefixed modes.
     {
         'monaqa/dial.nvim',
         config = function()
@@ -193,7 +161,7 @@ return {
         end,
     },
 
-    -- [[ Undo history visualizer ]]
+    -- [[ Undo history ]]
     {
         'mbbill/undotree',
         cmd = 'UndotreeToggle',
@@ -212,6 +180,7 @@ return {
         },
     },
 
+    -- [[ Vim practice ]]
     {
         'ThePrimeagen/vim-be-good',
         cmd = 'VimBeGood',
