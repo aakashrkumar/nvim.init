@@ -1,10 +1,10 @@
 -- [[ ESP32 ]]
--- ESP-IDF and PlatformIO commands use the shared Overseer task runner.
--- ESP-IDF debugging uses its activated toolchain and generated build metadata.
+-- Cargo, ESP-IDF CMake, and PlatformIO share Overseer and device ownership.
+-- Cargo keeps its project runner; probe-rs reads the project's launch.json.
 
 -- [[ ESP-IDF environment ]]
--- idf.py, the cross toolchains, and OpenOCD only exist inside an activated
--- ESP-IDF environment. Every task and the debug adapter run inside one.
+-- These CMake tasks resolve idf.py, cross tools, and OpenOCD inside the SDK's
+-- environment. Only these tasks/debugger activate it; Cargo inherits its shell.
 -- The install is chosen in this order:
 --   1. Neovim was started from an activated shell: use it as is.
 --   2. $IDF_PATH names an install: activate its `export.sh`.
@@ -64,10 +64,9 @@ local function idf_which(env, tool)
     return result.code == 0 and path ~= '' and path or nil
 end
 
--- An ESP-IDF project root holds `sdkconfig` (after the first configure) or
--- the top-level CMakeLists.txt that includes IDF's project.cmake.
+-- Cargo ESP-IDF crates also use sdkconfig.defaults. Only a top-level IDF
+-- CMake entry point opts into these CMake/idf.py tasks and OpenOCD configuration.
 local function is_idf_root(name, path)
-    if name == 'sdkconfig' or name == 'sdkconfig.defaults' then return true end
     if name ~= 'CMakeLists.txt' then return false end
     -- `vim.fs.find` passes the directory being searched rather than the entry.
     local file = io.open(vim.fs.basename(path) == name and path or vim.fs.joinpath(path, name))
@@ -121,10 +120,8 @@ end
 -- [[ Task templates ]]
 -- See `:help overseer-components` for the component parameters.
 local quickfix_on_failure = { 'on_output_quickfix', open_on_exit = 'failure' }
--- These templates do not resolve IDF/PIO's selected port, so all serial
--- tasks share one conservative resource across providers and projects,
--- not a per-device lock. OpenOCD owns a separate resource; builds own none.
-local function same_resource(a, b) return a.metadata.esp_resource ~= nil and a.metadata.esp_resource == b.metadata.esp_resource end
+local firmware = require 'aakash.esp32'
+local esp_debug = require 'aakash.esp_debug'
 
 ---@class aakash.TaskSpec
 ---@field name? string task name when `args` is a function
@@ -181,15 +178,12 @@ local function template(label, cwd, spec, command)
         builder = function(params)
             local args = type(spec.args) == 'function' and spec.args(params) or spec.args
             local components = vim.deepcopy(spec.components or {})
-            if spec.interactive then table.insert(components, { 'open_output', direction = 'float', focus = true, on_start = 'always' }) end
-            if spec.resource then table.insert(components, { 'unique', compare = same_resource }) end
             table.insert(components, 'default')
-            return {
+            return firmware.resource_task({
                 cmd = command(args),
                 cwd = cwd,
-                metadata = { esp_resource = spec.resource, interactive = spec.interactive },
                 components = components,
-            }
+            }, spec.resource, spec.interactive)
         end,
     }
 end
@@ -227,6 +221,38 @@ local pio_provider = {
             templates[#templates + 1] = template('pio', root, spec, function(args) return vim.list_extend({ pio }, args) end)
         end
         return templates
+    end,
+}
+
+---@type overseer.TemplateFileProvider
+local espflash_provider = {
+    name = 'espflash',
+    generator = function(opts)
+        local project, err = firmware.project(opts.dir)
+        if not project then return err or 'Not inside an ESP Rust project' end
+        if vim.fn.executable 'espflash' ~= 1 then return 'espflash is not installed' end
+        return {
+            template('espflash', opts.dir, {
+                name = 'monitor',
+                resource = 'serial',
+                interactive = true,
+                params = {
+                    port = { type = 'string', optional = true, desc = 'Serial port (empty uses espflash selection/config)' },
+                    elf = { type = 'string', optional = true, desc = 'ELF for symbols or defmt decoding' },
+                    log_format = { type = 'enum', choices = { 'serial', 'defmt' }, default = 'serial', desc = 'Firmware log encoding' },
+                },
+                args = function(params)
+                    local args = { 'monitor', '--log-format', params.log_format }
+                    if params.port and params.port ~= '' then vim.list_extend(args, { '--port', params.port }) end
+                    if params.elf and params.elf ~= '' then
+                        vim.list_extend(args, { '--elf', params.elf })
+                    elseif params.log_format == 'defmt' then
+                        error 'defmt monitoring needs the matching firmware ELF'
+                    end
+                    return args
+                end,
+            }, function(args) return vim.list_extend({ 'espflash' }, args) end),
+        }
     end,
 }
 
@@ -296,14 +322,19 @@ return {
         'stevearc/overseer.nvim',
         opts = function(_, opts)
             opts.templates = opts.templates or {}
-            vim.list_extend(opts.templates, { idf_provider, pio_provider })
+            vim.list_extend(opts.templates, { idf_provider, pio_provider, espflash_provider })
         end,
     },
 
     {
         'mfussenegger/nvim-dap',
+        dependencies = { 'stevearc/overseer.nvim' },
         opts = {
+            json_decode = function(...) return require('overseer.json').decode(...) end,
+            listeners = esp_debug.listeners,
+            type_to_filetypes = esp_debug.type_to_filetypes,
             adapters = {
+                ['probe-rs-debug'] = esp_debug.adapters['probe-rs-debug'],
                 esp_idf = function(callback)
                     local env = idf_environment()
                     if not env then
@@ -322,6 +353,7 @@ return {
                 end,
             },
             providers = {
+                ['dap.launch.json'] = esp_debug.providers['dap.launch.json'],
                 esp_idf = function(bufnr)
                     local root = vim.fs.root(bufnr, is_idf_root)
                     return root and { esp_idf_configuration(root) } or {}

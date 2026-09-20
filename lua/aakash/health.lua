@@ -52,14 +52,14 @@ local function check_external_reqs()
 
     check_tools('Language tools (only needed for languages you use)', {
         { { 'cargo' }, 'Rust builds and runnables' },
-        { { 'rust-analyzer' }, 'Rust language support through rustaceanvim' },
+        { { 'rustup' }, 'stable rust-analyzer and project-selected Rust toolchains' },
         { { 'rustfmt' }, 'Rust formatting' },
         { { 'python3' }, 'Python environments and the JDTLS launcher' },
         { { 'java' }, 'Java language support; JDTLS requires a JDK 21 or newer' },
         { { 'cmake' }, 'C/C++ project configuration and builds' },
     })
     vim.health.info 'For language tooling checks, run :checkhealth rustaceanvim or :checkhealth vim.lsp.'
-    vim.health.info 'ESP-IDF tools are resolved inside each task’s activated environment; they need not be on Neovim’s PATH.'
+    vim.health.info 'CMake ESP-IDF tasks activate their SDK environment; Cargo firmware tasks inherit the shell/project environment.'
 
     check_tools('LaTeX and Typst authoring tools', {
         { { 'texlab' }, 'LaTeX/BibTeX language support (Mason)' },
@@ -123,6 +123,112 @@ local function check_external_reqs()
     end
 end
 
+local function check_esp_rust()
+    check_tools('ESP Rust device tools (only needed for your chosen workflow)', {
+        { { 'espflash' }, 'Cargo serial flashing and monitoring' },
+        { { 'probe-rs' }, 'JTAG flashing, debugging, on-device tests and RTT' },
+    })
+    vim.health.start 'Rust analyzer and ESP firmware project'
+    local ok, analyzer = pcall(function() return require('aakash.rust').analyzer_command() end)
+    if ok then
+        vim.health.ok('Stable analyzer: ' .. analyzer[1])
+    else
+        vim.health.error(tostring(analyzer))
+    end
+
+    local root = require('aakash.project').get()
+    local project, err = require('aakash.esp32').project(root)
+    if not project then
+        if err then
+            vim.health.warn(err)
+        else
+            vim.health.info 'No ESP Cargo project at the current project root; open firmware to check its compiler, target and SDK requirements.'
+        end
+        return
+    end
+    vim.health.info(('Project: %s (%s)'):format(project.root, project.sdk == 'idf' and 'ESP-IDF/std' or 'esp-hal/no_std'))
+
+    local function output(command, env)
+        if vim.fn.executable(command[1]) ~= 1 then return nil, command[1] .. ' is not on PATH' end
+        local inspection_env = vim.tbl_extend('force', env or {}, { RUSTUP_AUTO_INSTALL = '0' })
+        local result = vim.system(command, { cwd = project.cwd, env = inspection_env, text = true }):wait(5000)
+        if result.code ~= 0 then return nil, vim.trim(result.stderr or 'command failed') end
+        return vim.trim(result.stdout)
+    end
+    local toolchain, toolchain_err = output { 'rustup', 'show', 'active-toolchain' }
+    if toolchain then
+        vim.health.ok('Cargo shell toolchain: ' .. toolchain)
+    else
+        vim.health.warn('Project toolchain: ' .. toolchain_err)
+    end
+    local extra_env = vim.tbl_get(project.settings, 'cargo', 'extraEnv')
+    if extra_env and next(extra_env) then vim.health.info('Analyzer Cargo environment overrides: ' .. vim.inspect(extra_env)) end
+    local compiler, compiler_err = output({ 'rustc', '--version' }, extra_env)
+    if compiler then
+        vim.health.ok('Analyzer project compiler: ' .. compiler)
+    else
+        vim.health.warn('Project compiler: ' .. compiler_err)
+        return
+    end
+
+    local sysroot, sysroot_err = output({ 'rustc', '--print', 'sysroot' }, extra_env)
+    if not sysroot then
+        vim.health.warn('Project sysroot: ' .. sysroot_err)
+        return
+    end
+    local macro_server = vim.tbl_get(project.settings, 'procMacro', 'server')
+        or vim.fs.joinpath(sysroot, 'libexec', 'rust-analyzer-proc-macro-srv' .. (vim.fn.has 'win32' == 1 and '.exe' or ''))
+    if vim.fn.executable(macro_server) == 1 then
+        vim.health.ok('Project proc-macro server: ' .. macro_server)
+    else
+        vim.health.warn(
+            'No project proc-macro server at '
+                .. macro_server
+                .. '; install/update this toolchain’s rust-analyzer component or set rust-analyzer.procMacro.server.'
+        )
+    end
+
+    local target = project.target
+    if type(target) == 'string' then
+        local targets = output({ 'rustc', '--print', 'target-list' }, extra_env)
+        if targets and not vim.tbl_contains(vim.split(targets, '\n', { plain = true }), target) and not target:match '%.json$' then
+            vim.health.error(('Project compiler does not support %s; check rust-toolchain.toml and rust-analyzer.cargo.extraEnv.'):format(target))
+        elseif vim.uv.fs_stat(vim.fs.joinpath(sysroot, 'lib', 'rustlib', target, 'lib')) then
+            vim.health.ok('Installed target libraries: ' .. target)
+        elseif vim.uv.fs_stat(vim.fs.joinpath(sysroot, 'lib', 'rustlib', 'src', 'rust', 'library')) then
+            vim.health.info(target .. ': no prebuilt libraries; rust-src is present, so the project can use Cargo build-std.')
+        else
+            vim.health.warn(target .. ': install the target libraries, or rust-src for a project using build-std.')
+        end
+    else
+        vim.health.info 'Cargo owns target selection. Set rust-analyzer.cargo.target in project settings to check the same target here and in the editor.'
+    end
+
+    if type(target) == 'string' and target:match '^xtensa' then
+        check_tools('Xtensa shell environment', {
+            { { 'xtensa-esp-elf-gcc', 'xtensa-' .. (target:match '^xtensa%-([^-]+)' or 'esp32') .. '-elf-gcc' }, 'Xtensa linker exported by espup' },
+        })
+        if vim.env.LIBCLANG_PATH and vim.uv.fs_stat(vim.env.LIBCLANG_PATH) then
+            vim.health.ok('LIBCLANG_PATH: ' .. vim.env.LIBCLANG_PATH)
+        else
+            vim.health.warn 'Source your espup export-esp.sh in the shell before launching Neovim; LIBCLANG_PATH is not usable.'
+        end
+    end
+    if project.sdk == 'idf' then
+        check_tools('ESP-IDF/std build prerequisites', {
+            { { 'ldproxy' }, 'Rust ESP-IDF linker proxy' },
+            { { 'cmake' }, 'ESP-IDF build configuration' },
+            { { 'ninja' }, 'ESP-IDF builds' },
+            { { 'python3' }, 'ESP-IDF build tooling' },
+        })
+        if vim.env.IDF_PATH then
+            vim.health.warn('Ambient IDF_PATH=' .. vim.env.IDF_PATH .. ' overrides esp-idf-sys SDK selection; keep it intentional for this project.')
+        else
+            vim.health.info 'esp-idf-sys manages the SDK selected by the project; no global ESP-IDF activation is required.'
+        end
+    end
+end
+
 return {
     check = function()
         vim.health.start 'aakash.nvim'
@@ -138,5 +244,6 @@ return {
 
         check_version()
         check_external_reqs()
+        check_esp_rust()
     end,
 }

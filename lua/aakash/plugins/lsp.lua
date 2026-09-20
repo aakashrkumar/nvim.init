@@ -35,6 +35,16 @@ return {
         opts = { input_buffer_type = 'snacks' },
     },
 
+    -- [[ Project-local LSP settings ]]
+    {
+        'mrjones2014/codesettings.nvim',
+        lazy = false,
+        opts = {
+            -- LazyDev remains the only owner of Lua workspace library paths.
+            lua_ls_integration = false,
+        },
+    },
+
     -- [[ Lua workspace support ]]
     {
         'folke/lazydev.nvim',

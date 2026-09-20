@@ -2,6 +2,9 @@
 -- Rustaceanvim owns rust-analyzer and runnables; Overseer runs their commands.
 -- Cargo profiling adds target selection without changing ordinary Run/Test.
 -- Crates and Conform handle manifest completion and formatting.
+-- Stable rust-analyzer reads each Cargo root's .vscode/settings.json. Firmware
+-- targets/features/allTargets stay project-local; toolchains/runners stay Cargo-owned.
+-- For Xtensa, source espup's export-esp.sh before starting Neovim.
 
 -- Rustaceanvim and native Cargo tasks share compiler and panic navigation.
 -- Keep panic headers as single-line entries. Messages and assertion left/right
@@ -25,22 +28,21 @@ local rust_errorformat = [[%Eerror: %\%%(aborting %\|could not compile%\)%\@!%m,
 local overseer_executor = {
     execute_command = function(command, args, cwd, opts)
         local overseer = require 'overseer'
-        overseer
-            .new_task({
-                cmd = vim.list_extend({ command }, args),
-                cwd = cwd,
-                env = opts and opts.env,
-                components = {
-                    {
-                        'on_output_quickfix',
-                        open_on_exit = 'failure',
-                        errorformat = rust_errorformat,
-                    },
-                    { 'open_output', direction = 'dock', on_start = 'always' },
-                    'default',
+        local task = require('aakash.esp32').cargo_task {
+            cmd = vim.list_extend({ command }, args),
+            cwd = cwd,
+            env = opts and opts.env,
+            components = {
+                {
+                    'on_output_quickfix',
+                    open_on_exit = 'failure',
+                    errorformat = rust_errorformat,
                 },
-            })
-            :start()
+                { 'open_output', direction = 'dock', on_start = 'always' },
+                'default',
+            },
+        }
+        overseer.new_task(task):start()
     end,
 }
 
@@ -255,6 +257,9 @@ return {
                 },
 
                 server = {
+                    cmd = function() return require('aakash.rust').analyzer_command() end,
+                    settings = function(root, defaults) return require('aakash.rust').server_settings(root, defaults) end,
+                    reuse_client = function(client, config) return require('aakash.rust').reuse_client(client, config) end,
                     on_attach = function(client, bufnr)
                         local map = function(lhs, rhs, desc)
                             vim.keymap.set('n', lhs, rhs, {
@@ -331,7 +336,9 @@ return {
                         },
                     },
                 },
+                dap = { configuration = require('aakash.esp_debug').rust_configuration },
             }
+            require('aakash.rust').setup()
         end,
     },
 
@@ -346,6 +353,7 @@ return {
                 hook = function(task_defn, util)
                     task_defn.default_component_params.errorformat = rust_errorformat
                     util.add_component(task_defn, { 'on_output_quickfix', open_on_exit = 'failure' })
+                    require('aakash.esp32').cargo_task(task_defn)
                 end,
             })
         end,

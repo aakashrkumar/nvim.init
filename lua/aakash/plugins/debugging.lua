@@ -21,6 +21,12 @@ return {
             -- of project. See `:help dap-providers-configs`.
             ---@type table<string, fun(bufnr: integer): dap.Configuration[]>
             providers = {},
+            -- Event listeners are keyed by phase, event, and owner; lifecycle
+            -- listeners (`on_config`/`on_session`) are keyed directly by owner.
+            listeners = { before = {}, after = {}, on_config = {}, on_session = {} },
+            type_to_filetypes = {},
+            -- Optional launch.json decoder, e.g. Overseer's JSONC decoder.
+            json_decode = nil,
         },
         config = function(_, opts)
             local dap = require 'dap'
@@ -33,6 +39,27 @@ return {
             for name, provider in pairs(opts.providers) do
                 dap.providers.configs[name] = provider
             end
+            for _, phase in ipairs { 'before', 'after' } do
+                for event, listeners in pairs(opts.listeners[phase] or {}) do
+                    for name, listener in pairs(listeners) do
+                        dap.listeners[phase][event][name] = listener
+                    end
+                end
+            end
+            for _, phase in ipairs { 'on_config', 'on_session' } do
+                for name, listener in pairs(opts.listeners[phase] or {}) do
+                    dap.listeners[phase][name] = listener
+                end
+            end
+            local vscode = require 'dap.ext.vscode'
+            for adapter, filetypes in pairs(opts.type_to_filetypes) do
+                local registered = vscode.type_to_filetypes[adapter] or {}
+                for _, filetype in ipairs(filetypes) do
+                    if not vim.list_contains(registered, filetype) then table.insert(registered, filetype) end
+                end
+                vscode.type_to_filetypes[adapter] = registered
+            end
+            if opts.json_decode then vscode.json_decode = opts.json_decode end
         end,
     },
 
