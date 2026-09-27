@@ -91,19 +91,24 @@ local function hover_documentation(client)
     end, bufnr)
 end
 
+local clangd_args = {
+    '--log=error',
+    '--background-index',
+    '--clang-tidy',
+    '--header-insertion=iwyu',
+    '--completion-style=detailed',
+    '--function-arg-placeholders=true',
+    '--fallback-style=llvm',
+}
+local host_clangd = vim.list_extend(clangd_command(), clangd_args)
+table.insert(host_clangd, '--query-driver=' .. table.concat(query_drivers, ','))
+
 ---@type table<string, vim.lsp.Config>
 local servers = {
     clangd = {
-        cmd = vim.list_extend(clangd_command(), {
-            '--log=error',
-            '--background-index',
-            '--clang-tidy',
-            '--header-insertion=iwyu',
-            '--completion-style=detailed',
-            '--function-arg-placeholders=true',
-            '--fallback-style=llvm',
-            '--query-driver=' .. table.concat(query_drivers, ','),
-        }),
+        -- Container clangd uses its own toolchain, never macOS resource/driver paths.
+        -- Use devcontainers.local_cmd.set for container-specific --query-driver arguments.
+        cmd = require('aakash.devcontainers').lsp_cmd(host_clangd, vim.list_extend({ 'clangd' }, clangd_args)),
         on_attach = function(client, bufnr)
             local map = function(mode, lhs, rhs, desc)
                 vim.keymap.set(mode, lhs, rhs, {
@@ -284,8 +289,11 @@ return {
         'WhoIsSethDaniel/mason-tool-installer.nvim',
         opts = function(_, opts)
             opts.ensure_installed = opts.ensure_installed or {}
+            -- Upstream clangd releases (and Mason) omit Linux ARM64; use the distro binary there.
+            local platform = vim.uv.os_uname()
+            local system_clangd = platform.sysname == 'Linux' and (platform.machine == 'aarch64' or platform.machine == 'arm64')
             for _, tool in ipairs { 'clangd', 'clang-format', 'codelldb' } do
-                if not vim.tbl_contains(opts.ensure_installed, tool) then table.insert(opts.ensure_installed, tool) end
+                if (tool ~= 'clangd' or not system_clangd) and not vim.tbl_contains(opts.ensure_installed, tool) then table.insert(opts.ensure_installed, tool) end
             end
         end,
     },

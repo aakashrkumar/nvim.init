@@ -163,6 +163,8 @@ return {
             -- Inspect installed servers/tools with :Mason; press g? there for help.
             for name, server in pairs(configured_servers) do
                 vim.lsp.config(name, server)
+                local cmd = vim.lsp.config[name].cmd
+                if type(cmd) == 'table' then vim.lsp.config(name, { cmd = require('aakash.devcontainers').lsp_cmd(cmd) }) end
                 vim.lsp.enable(name)
             end
         end,

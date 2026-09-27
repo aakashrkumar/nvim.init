@@ -257,7 +257,9 @@ return {
                 },
 
                 server = {
-                    cmd = function() return require('aakash.rust').analyzer_command() end,
+                    cmd = function()
+                        return require('aakash.devcontainers').lsp_cmd(function() return require('aakash.rust').analyzer_command() end, { 'rust-analyzer' })
+                    end,
                     settings = function(root, defaults) return require('aakash.rust').server_settings(root, defaults) end,
                     reuse_client = function(client, config) return require('aakash.rust').reuse_client(client, config) end,
                     on_attach = function(client, bufnr)

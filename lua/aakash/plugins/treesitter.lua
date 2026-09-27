@@ -18,7 +18,7 @@ return {
 
             -- Ensure basic parsers are installed
             -- Keep latex for Markdown math injections even though VimTeX owns .tex buffers.
-            local parsers = { 'bash', 'c', 'diff', 'html', 'latex', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+            local parsers = { 'bash', 'c', 'diff', 'html', 'json', 'latex', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
             require('nvim-treesitter').install(parsers)
 
             local group = vim.api.nvim_create_augroup('treesitter-attach', { clear = true })

@@ -40,7 +40,7 @@ local function jdtls_workspace(root_dir)
     return vim.fs.joinpath(vim.fn.stdpath 'cache', 'jdtls', project .. '-' .. hash)
 end
 
-local function start_jdtls(dispatchers, config)
+local function jdtls_command(config)
     local root_dir = config.root_dir or vim.fn.getcwd()
     local cmd = {
         'jdtls',
@@ -54,11 +54,7 @@ local function start_jdtls(dispatchers, config)
         if vim.uv.fs_stat(lombok_jar) then table.insert(cmd, 2, '--jvm-arg=-javaagent:' .. lombok_jar) end
     end
 
-    return vim.lsp.rpc.start(cmd, dispatchers, {
-        cwd = config.cmd_cwd,
-        env = config.cmd_env,
-        detached = config.detached,
-    })
+    return cmd
 end
 
 -- [[ Language server ]]
@@ -66,13 +62,19 @@ end
 -- Pin the command and root markers instead of depending on runtimepath order.
 ---@type vim.lsp.Config
 local server = {
-    cmd = start_jdtls,
+    cmd = require('aakash.devcontainers').lsp_cmd(
+        jdtls_command,
+        function(config) return { 'jdtls', '-data', '/tmp/nvim-jdtls-' .. vim.fn.sha256(config.root_dir):sub(1, 16) } end
+    ),
     filetypes = { 'java' },
     root_markers = {
         { 'mvnw', 'gradlew', 'settings.gradle', 'settings.gradle.kts', '.git' },
         { 'build.xml', 'pom.xml', 'build.gradle', 'build.gradle.kts' },
     },
-    before_init = function(params)
+    before_init = function(params, config)
+        -- Host Mason JARs are not mounted in the container. Its JDTLS installation
+        -- and project-local init_options own any container-side extensions.
+        if require('aakash.devcontainers').is_workspace(config.root_dir) then return end
         params.initializationOptions = params.initializationOptions or {}
         params.initializationOptions.bundles = java_bundles()
     end,

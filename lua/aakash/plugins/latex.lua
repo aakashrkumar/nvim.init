@@ -12,7 +12,7 @@ local servers = {
                 -- Start continuous builds with VimTeX, never a second build-on-save job.
                 build = { onSave = false, forwardSearchAfter = false },
                 -- Conform's manual <leader>f uses LSP fallback; no prose format-on-save.
-                -- Mason supplies standalone latexindent; BibTeX needs no extra tool.
+                -- Mason supplies latexindent where available; Linux ARM64 needs a distro/Perl install.
                 latexFormatter = 'latexindent',
                 bibtexFormatter = 'texlab',
             },
@@ -56,9 +56,11 @@ return {
         'WhoIsSethDaniel/mason-tool-installer.nvim',
         opts = function(_, opts)
             opts.ensure_installed = opts.ensure_installed or {}
-            -- Standalone latexindent avoids depending on the system Perl modules.
+            -- The standalone release has no Linux ARM64 binary.
+            local platform = vim.uv.os_uname()
+            local system_latexindent = platform.sysname == 'Linux' and (platform.machine == 'aarch64' or platform.machine == 'arm64')
             for _, tool in ipairs { 'texlab', 'latexindent' } do
-                if not vim.tbl_contains(opts.ensure_installed, tool) then table.insert(opts.ensure_installed, tool) end
+                if (tool ~= 'latexindent' or not system_latexindent) and not vim.tbl_contains(opts.ensure_installed, tool) then table.insert(opts.ensure_installed, tool) end
             end
         end,
     },

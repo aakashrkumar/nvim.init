@@ -64,6 +64,7 @@ vim.opt.runtimepath:prepend(lazypath)
 --
 -- `lazy-lock.json` should be kept in version control so another installation can
 -- restore the same revisions. See https://lazy.folke.io/usage/lockfile.
+
 require('lazy').setup {
     spec = {
         { import = 'aakash.plugins' },

@@ -36,6 +36,8 @@ M.patterns = {
     '.luarc.jsonc',
     'lua',
     '.obsidian',
+    '.devcontainer.json',
+    '.devcontainer',
     '.git',
 }
 
